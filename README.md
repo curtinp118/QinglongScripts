@@ -29,8 +29,8 @@
 | 分支 | `main` |
 | 定时类型 | `crontab` |
 | 定时规则 | `0 3 * * *` |
-| 白名单 | `GLaDOS|NodeSeek` |
-| 黑名单 | 留空 |
+| 白名单 | `^(GLaDOS|NodeSeek|V2EX)/` |
+| 黑名单 | `(^|/)(notify|notification_adapter)\.py$` |
 | 依赖文件 | `notification_adapter|notify` |
 | 文件后缀 | `py` |
 | 自动添加任务 | 开启 |
@@ -40,11 +40,12 @@
 仍需在表单中填写：
 
 ```bash
-ql repo "https://github.com/curtinp118/QinglongScripts.git" "GLaDOS|NodeSeek" "" "notification_adapter|notify" "main" "py"
+ql repo "https://github.com/curtinp118/QinglongScripts.git" "^(GLaDOS|NodeSeek|V2EX)/" "(^|/)(notify|notification_adapter)\.py$" "notification_adapter|notify" "main" "py"
 ```
 
-白名单决定哪些入口脚本参与自动建任务；依赖文件只负责复制公共模块，不会创建
-定时任务。后续订阅多个项目时，在白名单中使用 `|` 分隔项目目录名。白名单、
+白名单决定哪些入口脚本参与自动建任务；黑名单明确排除 `notify.py` 和
+`notification_adapter.py`，依赖文件字段再将它们复制到脚本目录供入口脚本导入。
+后续订阅多个项目时，将目录名加入白名单正则的括号内并使用 `|` 分隔。白名单、
 黑名单和依赖文件均支持关键词或正则表达式。
 
 创建完成后手动运行一次订阅，确认日志显示仓库拉取成功。后续由订阅定时规则
@@ -70,6 +71,7 @@ Token 或 Secret 直接写入脚本或定时任务命令。
 | --- | --- |
 | GLaDOS | [`GLaDOS/README.md`](./GLaDOS/README.md) |
 | NodeSeek | [`NodeSeek/README.md`](./NodeSeek/README.md) |
+| V2EX | [`V2EX/README.md`](./V2EX/README.md) |
 
 ### 运行任务
 
@@ -79,6 +81,7 @@ Token 或 Secret 直接写入脚本或定时任务命令。
 ```text
 task <订阅唯一值>/GLaDOS/GLaDOS.py
 task <订阅唯一值>/NodeSeek/NodeSeek.py
+task <订阅唯一值>/V2EX/V2EX.py
 ```
 
 `<订阅唯一值>` 以订阅管理页面实际显示的值为准。首次运行建议先查看完整日志，
@@ -90,6 +93,7 @@ task <订阅唯一值>/NodeSeek/NodeSeek.py
 | --- | --- | --- | --- |
 | GLaDOS | [`GLaDOS/GLaDOS.py`](./GLaDOS/GLaDOS.py) | [`GLaDOS/README.md`](./GLaDOS/README.md) | 多账号签到、积分查询与可选兑换 |
 | NodeSeek | [`NodeSeek/NodeSeek.py`](./NodeSeek/NodeSeek.py) | [`NodeSeek/README.md`](./NodeSeek/README.md) | 多账号每日签到 |
+| V2EX | [`V2EX/V2EX.py`](./V2EX/V2EX.py) | [`V2EX/README.md`](./V2EX/README.md) | 每日登录奖励与账户余额查询 |
 
 ## 公共文件索引
 
@@ -160,6 +164,13 @@ Token、签名等认证数据不会进入通知 Payload。
 
 确认订阅中的“自动添加任务”已开启，并检查订阅日志是否拉取了 `py` 文件。
 仍未生成时，可按上文示例手动创建定时任务。
+
+### 公共通知模块被自动添加为任务
+
+将订阅黑名单设置为 `(^|/)(notify|notification_adapter)\.py$`，依赖文件保持
+`notification_adapter|notify`，并确认“自动删除任务”已开启。重新运行一次订阅后，
+青龙会保留公共模块文件，同时从任务列表移除错误创建的任务；未开启自动删除时需
+手动删除对应任务。
 
 ### 提示 `ModuleNotFoundError: requests`
 
