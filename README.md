@@ -29,9 +29,9 @@
 | 分支 | `main` |
 | 定时类型 | `crontab` |
 | 定时规则 | `0 3 * * *` |
-| 白名单 | 留空，拉取全部项目 |
+| 白名单 | `GLaDOS` |
 | 黑名单 | 留空 |
-| 依赖文件 | 留空 |
+| 依赖文件 | `notification_adapter|notify` |
 | 文件后缀 | `py` |
 | 自动添加任务 | 开启 |
 | 自动删除任务 | 开启 |
@@ -40,12 +40,12 @@
 仍需在表单中填写：
 
 ```bash
-ql repo "https://github.com/curtinp118/QinglongScripts.git" "" "" "" "main" "py"
+ql repo "https://github.com/curtinp118/QinglongScripts.git" "GLaDOS" "" "notification_adapter|notify" "main" "py"
 ```
 
-只需要 GLaDOS 项目时，可将白名单设置为 `GLaDOS`，依赖文件设置为
-`notification_adapter|notify`。白名单、黑名单和依赖文件均支持使用 `|`
-分隔多个关键词或正则表达式。
+白名单决定哪些入口脚本参与自动建任务；依赖文件只负责复制公共模块，不会创建
+定时任务。后续订阅多个项目时，在白名单中使用 `|` 分隔项目目录名。白名单、
+黑名单和依赖文件均支持关键词或正则表达式。
 
 创建完成后手动运行一次订阅，确认日志显示仓库拉取成功。后续由订阅定时规则
 自动获取更新。
@@ -72,8 +72,8 @@ Token 或 Secret 直接写入脚本或定时任务命令。
 
 ### 运行任务
 
-订阅成功后，青龙会根据入口脚本头部的 Cron 信息自动添加任务。若当前版本未
-自动创建，可在 **定时任务** 中手动添加：
+订阅成功后，青龙会读取入口脚本顶部小写的 `name:` 和 `cron:`，自动生成任务
+名称与定时规则。若当前版本未自动创建，可在 **定时任务** 中手动添加：
 
 ```text
 task <订阅唯一值>/GLaDOS/GLaDOS.py

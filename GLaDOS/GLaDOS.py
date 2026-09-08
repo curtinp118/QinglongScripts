@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-脚本名称: GLaDOS 自动签到脚本
-功能描述: 多账号执行 GLaDOS 签到，并查询积分与剩余天数
-Cron: 0 8 * * *
-环境变量:
+name: GLaDOS 自动签到
+description: 多账号执行 GLaDOS 签到，并查询积分与剩余天数
+cron: 0 8 * * *
+env:
   - GLADOS_COOKIES (必填): GLaDOS Cookie，多账号用 ||| 分割
   - GLADOS_DOMAINS (选填): HTTPS 服务域名，多域名用 ||| 分割
   - GLADOS_EXCHANGE_PLAN (选填): 自动兑换计划，默认关闭
-更新时间: 2026-09-08
-声明: 仅供学习交流，禁止用于商业用途，风险自负
+version: 1.0.0
+updated: 2026-09-08
+disclaimer: 仅供学习交流，禁止用于商业用途，风险自负
 """
 
 from __future__ import annotations
