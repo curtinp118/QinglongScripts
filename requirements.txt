@@ -1,0 +1,6 @@
+# 项目级 Python 依赖汇总。
+#
+# requests:
+#   - notify.py：青龙官方通知模块的 HTTP 客户端
+#   - GLaDOS/GLaDOS.py：签到、积分查询及兑换接口请求
+requests>=2.28.0,<3.0.0
