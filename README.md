@@ -29,7 +29,7 @@
 | 分支 | `main` |
 | 定时类型 | `crontab` |
 | 定时规则 | `0 3 * * *` |
-| 白名单 | `GLaDOS` |
+| 白名单 | `GLaDOS|NodeSeek` |
 | 黑名单 | 留空 |
 | 依赖文件 | `notification_adapter|notify` |
 | 文件后缀 | `py` |
@@ -40,7 +40,7 @@
 仍需在表单中填写：
 
 ```bash
-ql repo "https://github.com/curtinp118/QinglongScripts.git" "GLaDOS" "" "notification_adapter|notify" "main" "py"
+ql repo "https://github.com/curtinp118/QinglongScripts.git" "GLaDOS|NodeSeek" "" "notification_adapter|notify" "main" "py"
 ```
 
 白名单决定哪些入口脚本参与自动建任务；依赖文件只负责复制公共模块，不会创建
@@ -69,6 +69,7 @@ Token 或 Secret 直接写入脚本或定时任务命令。
 | 项目 | 配置文档 |
 | --- | --- |
 | GLaDOS | [`GLaDOS/README.md`](./GLaDOS/README.md) |
+| NodeSeek | [`NodeSeek/README.md`](./NodeSeek/README.md) |
 
 ### 运行任务
 
@@ -77,6 +78,7 @@ Token 或 Secret 直接写入脚本或定时任务命令。
 
 ```text
 task <订阅唯一值>/GLaDOS/GLaDOS.py
+task <订阅唯一值>/NodeSeek/NodeSeek.py
 ```
 
 `<订阅唯一值>` 以订阅管理页面实际显示的值为准。首次运行建议先查看完整日志，
@@ -87,6 +89,7 @@ task <订阅唯一值>/GLaDOS/GLaDOS.py
 | 项目 | 入口脚本 | 配置文档 | 说明 |
 | --- | --- | --- | --- |
 | GLaDOS | [`GLaDOS/GLaDOS.py`](./GLaDOS/GLaDOS.py) | [`GLaDOS/README.md`](./GLaDOS/README.md) | 多账号签到、积分查询与可选兑换 |
+| NodeSeek | [`NodeSeek/NodeSeek.py`](./NodeSeek/NodeSeek.py) | [`NodeSeek/README.md`](./NodeSeek/README.md) | 多账号每日签到 |
 
 ## 公共文件索引
 
