@@ -29,7 +29,7 @@
 | 分支 | `main` |
 | 定时类型 | `crontab` |
 | 定时规则 | `0 3 * * *` |
-| 白名单 | `^(GLaDOS|NodeSeek|V2EX)/` |
+| 白名单 | `^(GLaDOS|V2EX)/` |
 | 黑名单 | `(^|/)(notify|notification_adapter)\.py$` |
 | 依赖文件 | `notification_adapter|notify` |
 | 文件后缀 | `py` |
@@ -40,7 +40,7 @@
 仍需在表单中填写：
 
 ```bash
-ql repo "https://github.com/curtinp118/QinglongScripts.git" "^(GLaDOS|NodeSeek|V2EX)/" "(^|/)(notify|notification_adapter)\.py$" "notification_adapter|notify" "main" "py"
+ql repo "https://github.com/curtinp118/QinglongScripts.git" "^(GLaDOS|V2EX)/" "(^|/)(notify|notification_adapter)\.py$" "notification_adapter|notify" "main" "py"
 ```
 
 白名单决定哪些入口脚本参与自动建任务；黑名单明确排除 `notify.py` 和
@@ -53,11 +53,8 @@ ql repo "https://github.com/curtinp118/QinglongScripts.git" "^(GLaDOS|NodeSeek|V
 
 ### 安装 Python 依赖
 
-本仓库基础脚本依赖 `requests`；NodeSeek 另外使用浏览器和页面解析依赖
-`beautifulsoup4`、`selenium`、`undetected-chromedriver`。青龙通常已包含
-`requests`，若任务提示缺少模块，按对应项目的 `requirements.txt` 安装依赖。
-NodeSeek 还要求在青龙容器中单独安装 Chrome/Chromium；安装方法和容器检查命令见
-[`NodeSeek/README.md`](./NodeSeek/README.md) 的“Docker 安装 Chromium”章节。
+本仓库脚本依赖 `requests`。青龙通常已包含该库，若任务提示缺少模块，按对应项目的
+`requirements.txt` 安装依赖。
 
 使用独立 Python 环境时，可执行：
 
@@ -73,7 +70,6 @@ Token 或 Secret 直接写入脚本或定时任务命令。
 | 项目 | 配置文档 |
 | --- | --- |
 | GLaDOS | [`GLaDOS/README.md`](./GLaDOS/README.md) |
-| NodeSeek | [`NodeSeek/README.md`](./NodeSeek/README.md) |
 | V2EX | [`V2EX/README.md`](./V2EX/README.md) |
 
 ### 运行任务
@@ -83,7 +79,6 @@ Token 或 Secret 直接写入脚本或定时任务命令。
 
 ```text
 task <订阅唯一值>/GLaDOS/GLaDOS.py
-task <订阅唯一值>/NodeSeek/NodeSeek.py
 task <订阅唯一值>/V2EX/V2EX.py
 ```
 
@@ -95,7 +90,6 @@ task <订阅唯一值>/V2EX/V2EX.py
 | 项目 | 入口脚本 | 配置文档 | 说明 |
 | --- | --- | --- | --- |
 | GLaDOS | [`GLaDOS/GLaDOS.py`](./GLaDOS/GLaDOS.py) | [`GLaDOS/README.md`](./GLaDOS/README.md) | 多账号签到、积分查询与可选兑换 |
-| NodeSeek | [`NodeSeek/NodeSeek.py`](./NodeSeek/NodeSeek.py) | [`NodeSeek/README.md`](./NodeSeek/README.md) | 多账号页面签到及可选评论 |
 | V2EX | [`V2EX/V2EX.py`](./V2EX/V2EX.py) | [`V2EX/README.md`](./V2EX/README.md) | 每日登录奖励与账户余额查询 |
 
 ## 公共文件索引
@@ -177,9 +171,7 @@ Token、签名等认证数据不会进入通知 Payload。
 
 ### 提示 `ModuleNotFoundError`
 
-根据报错模块在青龙 **依赖管理** 中安装对应的 Python3 依赖。NodeSeek 需要
-`beautifulsoup4`、`requests`、`selenium`、`setuptools` 和
-`undetected-chromedriver`，安装完成后重新运行任务。
+根据报错模块在青龙 **依赖管理** 中安装对应的 Python3 依赖，安装完成后重新运行任务。
 
 ### 日志提示“无推送渠道”
 
