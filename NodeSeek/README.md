@@ -133,6 +133,34 @@ docker exec -u qinglong qinglong sh -lc \
 `/home/qinglong/.local/share/undetected_chromedriver`。如果日志仍显示浏览器启动失败，
 先在容器内执行 `chromium --version`，再检查 `NODESEEK_CHROME_BIN` 路径和容器架构。
 
+### 不安装系统 Chromium 的方案
+
+如果不希望安装 `chromium` 系统包，可以将 Chrome for Testing 的完整目录放到持久化的
+`/ql/data` 下，再把浏览器可执行文件配置给任务。官方页面会提供 `linux64` 和
+`linux-arm64` 等平台的 Chrome 压缩包，下载时选择 `chrome`，不要只下载
+`chromedriver`：
+
+<https://googlechromelabs.github.io/chrome-for-testing/>
+
+解压后，在青龙环境变量中设置类似下面的路径（实际目录名按下载平台调整）：
+
+```text
+NODESEEK_HEADLESS=true
+NODESEEK_CHROME_BIN=/ql/data/chrome/chrome-linux64/chrome
+```
+
+这种方式不经过 `apt` 或 `apk`，但仍然需要完整的浏览器运行时；如果 Alpine 容器报
+`libc.so.6` 或其他动态库缺失，说明该浏览器二进制与当前基础镜像不兼容，应改用
+Debian 镜像或远程浏览器服务。只挂载宿主机的 `/usr/bin/chromium` 单个文件通常不可行。
+
+另一种保持青龙容器不变的方式是使用独立 Selenium Grid/Chrome 容器，由任务通过
+`RemoteWebDriver` 发送指令。Selenium 官方支持这种客户端与浏览器分离的部署方式，
+但当前脚本使用本地 `undetected_chromedriver`，尚未读取远程地址；启用远程浏览器需要
+额外改造启动模块，并重新验证 Cloudflare 和登录流程。远程 WebDriver 端口只能在内网
+开放并做好访问控制：
+
+<https://www.selenium.dev/documentation/webdriver/drivers/remote_webdriver/>
+
 手动任务命令：
 
 ```text
