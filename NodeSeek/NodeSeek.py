@@ -62,6 +62,12 @@ COMMENT_URL_ENV_NAME = "NODESEEK_COMMENT_URL"
 DELAY_MIN_ENV_NAME = "NODESEEK_DELAY_MIN"
 DELAY_MAX_ENV_NAME = "NODESEEK_DELAY_MAX"
 CHROME_BIN_ENV_NAME = "NODESEEK_CHROME_BIN"
+CHROME_EXECUTABLE_NAMES = (
+    "google-chrome",
+    "google-chrome-stable",
+    "chromium",
+    "chromium-browser",
+)
 
 ACCOUNT_SEPARATOR = "|||"
 SITE_ORIGIN = "https://www.nodeseek.com"
@@ -514,16 +520,24 @@ def build_driver(settings: Settings) -> Any:
         chrome_options.binary_location = settings.chrome_binary
 
     chrome_binary = settings.chrome_binary
-    if not chrome_binary:
-        for executable in (
-            "google-chrome",
-            "google-chrome-stable",
-            "chromium",
-            "chromium-browser",
+    if chrome_binary:
+        chrome_binary = os.path.expanduser(chrome_binary)
+        if not os.path.isfile(chrome_binary) or not os.access(
+            chrome_binary, os.X_OK
         ):
+            raise NodeSeekError(
+                f"{CHROME_BIN_ENV_NAME} 指向的浏览器不可执行: {chrome_binary}"
+            )
+    else:
+        for executable in CHROME_EXECUTABLE_NAMES:
             chrome_binary = shutil.which(executable)
             if chrome_binary:
                 break
+    if not chrome_binary:
+        raise NodeSeekError(
+            "未找到 Chrome/Chromium，请安装浏览器或设置 "
+            f"{CHROME_BIN_ENV_NAME}"
+        )
     chrome_major_version: int | None = None
     if chrome_binary:
         try:
@@ -556,7 +570,9 @@ def build_driver(settings: Settings) -> Any:
         driver.set_window_size(1920, 1080)
         return driver
     except Exception as exc:
-        raise NodeSeekError("Chrome 浏览器启动失败") from exc
+        detail = compact_message(exc)
+        LOGGER.error("Chrome 启动失败 (%s): %s", type(exc).__name__, detail)
+        raise NodeSeekError(f"Chrome 浏览器启动失败: {detail}") from exc
 
 
 def close_driver(driver: Any) -> None:

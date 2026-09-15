@@ -58,10 +58,80 @@ Cookie 字段可能随 NodeSeek 调整，以登录浏览器实际请求携带的
    `requests`、`selenium`、`setuptools` 和 `undetected-chromedriver`。
 3. 运行仓库订阅，让青龙自动创建任务。
 
-青龙运行环境还必须预装 Chrome/Chromium。容器中建议使用无头模式（保持
-`NODESEEK_HEADLESS=true`），如果浏览器不在 PATH 中，将其绝对路径写入
-`NODESEEK_CHROME_BIN`。`undetected-chromedriver` 会在首次启动时准备匹配的
-驱动文件，青龙任务运行用户需要拥有其缓存目录的写权限。
+青龙的 Python 依赖管理只能安装 Python 包，不能安装操作系统级浏览器。任务运行环境
+必须另行安装 Chrome/Chromium；容器中建议使用无头模式（保持
+`NODESEEK_HEADLESS=true`）。
+
+如果日志先出现 `patching driver executable`，随后出现 `Chrome 浏览器启动失败`，
+说明驱动文件已经准备，但浏览器程序没有安装、路径不可执行，或当前容器架构不匹配。
+
+### Docker 安装 Chromium（推荐）
+
+青龙官方镜像的 `latest` 版本基于 Alpine；需要额外系统依赖时，建议改用
+`whyour/qinglong:debian`，再构建一个带 Chromium 的镜像。新建 `Dockerfile`：
+
+```dockerfile
+FROM whyour/qinglong:debian
+
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends chromium fonts-noto-cjk \
+    && rm -rf /var/lib/apt/lists/*
+
+USER qinglong
+```
+
+在 `Dockerfile` 所在目录执行：
+
+```bash
+docker build -t qinglong-nodeseek:debian .
+```
+
+然后用这个镜像重新创建青龙容器。请沿用原容器的 `/ql/data` 挂载、端口、名称和其他
+环境变量，例如：
+
+```bash
+docker stop qinglong
+docker rm qinglong
+docker run -d \
+  --name qinglong \
+  --restart unless-stopped \
+  -v /你的路径/ql/data:/ql/data \
+  -p 5700:5700 \
+  qinglong-nodeseek:debian
+```
+
+如果当前容器本身就是 Debian，也可以临时安装（重新创建或更新容器后需要重装）：
+
+```bash
+docker exec -u 0 -it qinglong sh
+apt-get update && apt-get install -y --no-install-recommends chromium fonts-noto-cjk
+exit
+```
+
+如果执行 `apt-get` 提示命令不存在，说明当前是 Alpine 镜像；可以临时执行
+`apk add --no-cache chromium nss freetype harfbuzz ttf-freefont font-noto-cjk`，但长期使用
+建议按上面的 Debian 方案重建容器。
+
+安装完成后，在青龙 **环境变量** 中设置：
+
+```text
+NODESEEK_HEADLESS=true
+NODESEEK_CHROME_BIN=/usr/bin/chromium
+```
+
+如果使用 Google Chrome，将 `NODESEEK_CHROME_BIN` 改为实际路径，例如
+`/usr/bin/google-chrome`。用下面的命令确认青龙任务用户可以启动浏览器：
+
+```bash
+docker exec -u qinglong qinglong sh -lc \
+  '/usr/bin/chromium --headless --no-sandbox --disable-dev-shm-usage \
+   --dump-dom data:,ok >/dev/null && echo browser-ok'
+```
+
+`undetected-chromedriver` 首次运行会准备匹配的驱动文件，任务用户需要能写入
+`/home/qinglong/.local/share/undetected_chromedriver`。如果日志仍显示浏览器启动失败，
+先在容器内执行 `chromium --version`，再检查 `NODESEEK_CHROME_BIN` 路径和容器架构。
 
 手动任务命令：
 

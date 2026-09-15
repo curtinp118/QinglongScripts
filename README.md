@@ -56,8 +56,8 @@ ql repo "https://github.com/curtinp118/QinglongScripts.git" "^(GLaDOS|NodeSeek|V
 本仓库基础脚本依赖 `requests`；NodeSeek 另外使用浏览器和页面解析依赖
 `beautifulsoup4`、`selenium`、`undetected-chromedriver`。青龙通常已包含
 `requests`，若任务提示缺少模块，按对应项目的 `requirements.txt` 安装依赖。
-NodeSeek 任务还要求 `setuptools` 兼容依赖和预装 Chrome/Chromium。容器环境建议
-保持无头模式，浏览器不在 PATH 时可用 `NODESEEK_CHROME_BIN` 指定绝对路径。
+NodeSeek 还要求在青龙容器中单独安装 Chrome/Chromium；安装方法和容器检查命令见
+[`NodeSeek/README.md`](./NodeSeek/README.md) 的“Docker 安装 Chromium”章节。
 
 使用独立 Python 环境时，可执行：
 
