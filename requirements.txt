@@ -1,8 +1,18 @@
 # 项目级 Python 依赖汇总。
 #
+# beautifulsoup4:
+#   - NodeSeek/NodeSeek.py：NodeSeek 页面结构解析
+#
 # requests:
 #   - notify.py：青龙官方通知模块的 HTTP 客户端
 #   - GLaDOS/GLaDOS.py：签到、积分查询及兑换接口请求
-#   - NodeSeek/NodeSeek.py：NodeSeek 签到接口请求
+#   - NodeSeek/NodeSeek.py：青龙官方通知模块的 HTTP 客户端依赖
 #   - V2EX/V2EX.py：每日任务与账户余额页面请求
+#
+# setuptools:
+#   - NodeSeek/NodeSeek.py：Python 3.12 下 undetected-chromedriver 的兼容依赖
+beautifulsoup4>=4.12.0,<5.0.0
 requests>=2.28.0,<3.0.0
+selenium>=4.25.0,<5.0.0
+setuptools>=69.0.0,<81.0.0
+undetected-chromedriver>=3.5.5,<4.0.0

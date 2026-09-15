@@ -53,8 +53,11 @@ ql repo "https://github.com/curtinp118/QinglongScripts.git" "^(GLaDOS|NodeSeek|V
 
 ### 安装 Python 依赖
 
-本仓库当前统一依赖 `requests`。青龙通常已包含该库；若任务提示缺少模块，进入
-**依赖管理**，创建类型为 `Python3`、名称为 `requests` 的依赖。
+本仓库基础脚本依赖 `requests`；NodeSeek 另外使用浏览器和页面解析依赖
+`beautifulsoup4`、`selenium`、`undetected-chromedriver`。青龙通常已包含
+`requests`，若任务提示缺少模块，按对应项目的 `requirements.txt` 安装依赖。
+NodeSeek 任务还要求 `setuptools` 兼容依赖和预装 Chrome/Chromium。容器环境建议
+保持无头模式，浏览器不在 PATH 时可用 `NODESEEK_CHROME_BIN` 指定绝对路径。
 
 使用独立 Python 环境时，可执行：
 
@@ -92,7 +95,7 @@ task <订阅唯一值>/V2EX/V2EX.py
 | 项目 | 入口脚本 | 配置文档 | 说明 |
 | --- | --- | --- | --- |
 | GLaDOS | [`GLaDOS/GLaDOS.py`](./GLaDOS/GLaDOS.py) | [`GLaDOS/README.md`](./GLaDOS/README.md) | 多账号签到、积分查询与可选兑换 |
-| NodeSeek | [`NodeSeek/NodeSeek.py`](./NodeSeek/NodeSeek.py) | [`NodeSeek/README.md`](./NodeSeek/README.md) | 多账号每日签到 |
+| NodeSeek | [`NodeSeek/NodeSeek.py`](./NodeSeek/NodeSeek.py) | [`NodeSeek/README.md`](./NodeSeek/README.md) | 多账号页面签到及可选评论 |
 | V2EX | [`V2EX/V2EX.py`](./V2EX/V2EX.py) | [`V2EX/README.md`](./V2EX/README.md) | 每日登录奖励与账户余额查询 |
 
 ## 公共文件索引
@@ -172,9 +175,11 @@ Token、签名等认证数据不会进入通知 Payload。
 青龙会保留公共模块文件，同时从任务列表移除错误创建的任务；未开启自动删除时需
 手动删除对应任务。
 
-### 提示 `ModuleNotFoundError: requests`
+### 提示 `ModuleNotFoundError`
 
-在青龙 **依赖管理** 中安装 Python3 依赖 `requests`，安装完成后重新运行任务。
+根据报错模块在青龙 **依赖管理** 中安装对应的 Python3 依赖。NodeSeek 需要
+`beautifulsoup4`、`requests`、`selenium`、`setuptools` 和
+`undetected-chromedriver`，安装完成后重新运行任务。
 
 ### 日志提示“无推送渠道”
 
