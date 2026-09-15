@@ -372,7 +372,7 @@ def is_challenge_page(driver: Any) -> bool:
 
 
 def wait_for_cloudflare(driver: Any) -> None:
-    """保留原脚本的 Cloudflare 等待行为，不记录页面源码。"""
+    """等待 Cloudflare 验证完成，不记录页面源码。"""
     deadline = time.monotonic() + CLOUDFLARE_WAIT_SECONDS
     while is_challenge_page(driver) and time.monotonic() < deadline:
         LOGGER.info("等待 Cloudflare 验证完成")
@@ -442,7 +442,7 @@ def click_sign_icon(
     driver: Any,
     settings: Settings,
 ) -> tuple[SignInStatus, str]:
-    """保留原脚本的签到面板点击与兜底流程。"""
+    """执行签到面板点击，并在页面结构变化时使用备用选择器。"""
     try:
         driver.get(BOARD_URL)
         time.sleep(3)
@@ -568,10 +568,7 @@ def close_driver(driver: Any) -> None:
 
 
 def setup_driver_and_cookies(settings: Settings, cookie: str) -> Any:
-    """初始化浏览器并设置 Cookie。
-
-    保留原脚本的 Cloudflare 等待步骤。
-    """
+    """初始化浏览器、设置 Cookie 并等待 Cloudflare 验证。"""
     driver = build_driver(settings)
     try:
         driver.get(SITE_ORIGIN)
