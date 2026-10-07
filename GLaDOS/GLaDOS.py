@@ -7,7 +7,8 @@ env:
   - GLADOS_COOKIES (必填): GLaDOS Cookie，多账号用 |||、& 或换行分割
   - GLADOS_DOMAINS (选填): HTTPS 服务域名，多域名用 ||| 分割
   - GLADOS_EXCHANGE_PLAN (选填): 自动兑换计划，默认关闭
-version: 1.1.0
+  - GLADOS_USER_AGENT (选填): 登录浏览器完整 User-Agent，默认 Windows Chrome
+version: 1.2.0
 updated: 2026-10-07
 disclaimer: 仅供学习交流，禁止用于商业用途，风险自负
 """
@@ -40,9 +41,21 @@ LOGGER = logging.getLogger("glados")
 COOKIE_ENV_NAME = "GLADOS_COOKIES"
 DOMAIN_ENV_NAME = "GLADOS_DOMAINS"
 EXCHANGE_ENV_NAME = "GLADOS_EXCHANGE_PLAN"
+USER_AGENT_ENV_NAME = "GLADOS_USER_AGENT"
 ACCOUNT_SEPARATOR = "|||"
 DEFAULT_DOMAIN = "glados.cloud"
-KNOWN_DOMAINS = frozenset({"glados.cloud", "railgun.info"})
+KNOWN_DOMAINS = frozenset(
+    {
+        "glados.network",
+        "glados.rocks",
+        "glados.one",
+        "glados.space",
+        "glados.cloud",
+        "glados.vip",
+        "glados-facility.com",
+        "railgun.info",
+    }
+)
 EXCHANGE_PLANS = {"plan100": 100, "plan200": 200, "plan500": 500}
 DISABLED_VALUES = frozenset(
     {"", "0", "false", "off", "none", "disable", "disabled"}
@@ -55,6 +68,11 @@ REQUEST_TIMEOUT_SECONDS = 10
 MAX_REQUEST_ATTEMPTS = 3
 MAX_SERVICE_MESSAGE_LENGTH = 120
 ACCOUNT_DELAY_RANGE_SECONDS = (0.5, 1.5)
+DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/120.0.0.0 Safari/537.36"
+)
 REPEAT_KEYWORDS = ("repeat", "already", "重复", "已签到", "签到过", "请勿")
 AUTH_FAIL_KEYWORDS = (
     "没有权限",
@@ -64,6 +82,10 @@ AUTH_FAIL_KEYWORDS = (
     "unauthorized",
     "forbidden",
     "invalid token",
+)
+DEVICE_CHECK_KEYWORDS = (
+    "automated check-in detected",
+    "device-mismatch",
 )
 SESSION_KEY_PATTERN = re.compile(
     r"^(?P<prefix>[A-Za-z0-9_.-]+):sess(?P<signature>\.sig)?$"
@@ -283,14 +305,25 @@ def parse_earned_points(message: str) -> int:
 class GLaDOSClient:
     """封装单账号的 GLaDOS API 调用。"""
 
-    def __init__(self, domain: str, cookie: str) -> None:
+    def __init__(
+        self,
+        domain: str,
+        cookie: str,
+        user_agent: str | None = None,
+    ) -> None:
         self.domain = domain
         self.session = requests.Session()
+        selected_user_agent = (
+            user_agent
+            or os.environ.get(USER_AGENT_ENV_NAME, "").strip()
+            or DEFAULT_USER_AGENT
+        )
         self.headers = {
             "cookie": cookie,
             "origin": f"https://{domain}",
             "referer": f"https://{domain}/console/checkin",
-            "user-agent": "QingLong-GLaDOS/1.0",
+            "user-agent": selected_user_agent,
+            "accept": "application/json, text/plain, */*",
         }
 
     def __enter__(self) -> "GLaDOSClient":
@@ -341,8 +374,9 @@ class GLaDOSClient:
                 should_retry = retryable and isinstance(
                     exc, requests.RequestException
                 )
-                if isinstance(exc, requests.HTTPError) and exc.response is not None:
-                    status_code = exc.response.status_code
+                response = getattr(exc, "response", None)
+                if isinstance(exc, requests.HTTPError) and response is not None:
+                    status_code = response.status_code
                     should_retry = retryable and (
                         status_code == 429 or status_code >= 500
                     )
@@ -437,17 +471,28 @@ def execute_account(
                 CheckinCode.SUCCESS,
                 CheckinCode.ALREADY_CHECKED_IN,
             }:
+                message_lower = message.lower()
+                if any(
+                    keyword in message_lower
+                    for keyword in DEVICE_CHECK_KEYWORDS
+                ):
+                    failure_detail = (
+                        "设备校验失败: 请设置与登录浏览器一致的 "
+                        f"{USER_AGENT_ENV_NAME}"
+                    )
+                elif any(
+                    keyword in message_lower
+                    for keyword in AUTH_FAIL_KEYWORDS
+                ):
+                    failure_detail = (
+                        f"鉴权失败: {message}，请重新获取 Cookie"
+                    )
+                else:
+                    failure_detail = f"签到失败: {message}"
                 return AccountResult(
                     account_name,
                     ResultStatus.FAILED,
-                    (
-                        f"鉴权失败: {message}，请重新获取 Cookie"
-                        if any(
-                            keyword in message.lower()
-                            for keyword in AUTH_FAIL_KEYWORDS
-                        )
-                        else f"签到失败: {message}"
-                    ),
+                    failure_detail,
                 )
 
             detail_items = []

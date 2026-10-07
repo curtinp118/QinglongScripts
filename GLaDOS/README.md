@@ -20,9 +20,12 @@ GLaDOS/
 | `GLADOS_COOKIES` | 是 | GLaDOS Cookie，多账号用 `|||`、`&` 或换行分隔（推荐 `|||`） |
 | `GLADOS_DOMAINS` | 否 | 服务域名，多域名用 `|||` 分隔，默认 `glados.cloud` |
 | `GLADOS_EXCHANGE_PLAN` | 否 | `plan100`、`plan200` 或 `plan500`，默认关闭 |
+| `GLADOS_USER_AGENT` | 否 | 登录浏览器完整 User-Agent；新版设备校验失败时必须配置 |
 
-`GLADOS_DOMAINS` 支持 `glados.cloud`、`railgun.info` 和显式配置的自定义
-HTTPS 域名。自定义值只允许纯主机名，不接受路径、端口、用户信息或 HTTP；
+`GLADOS_DOMAINS` 支持 GLaDOS 官方主站（`glados.network`、`glados.rocks`、
+`glados.one`、`glados.space`、`glados.cloud`、`glados.vip`、
+`glados-facility.com`、`railgun.info`）和显式配置的自定义 HTTPS 域名。
+自定义值只允许纯主机名，不接受路径、端口、用户信息或 HTTP；
 配置前须确认该域名可信，因为脚本会将 GLaDOS Cookie 发送给它。
 
 Cookie 必须包含同一前缀成对的 `:sess` 和 `:sess.sig` 字段。GLaDOS 当前常见的
@@ -63,6 +66,9 @@ python3 -m pip install -r GLaDOS/requirements.txt
 
 - 签到接口识别“签到成功”和“今日已签到”，两者均视为幂等成功；当服务端 code
   缺失时，也会兼容参考项目中的中英文消息关键词。
+- 新版接口会校验登录设备；如果返回 `Automated check-in detected` 或
+  `device-mismatch`，请在登录 Cookie 的同一个浏览器打开 `chrome://version`，复制完整
+  User-Agent 设置到 `GLADOS_USER_AGENT`。未配置时使用 Windows Chrome 默认值。
 - 单次请求超时为 10 秒；网络错误、HTTP 429 和 5xx 最多尝试 3 次。
 - 单账号失败不会中止后续账号，最终状态可能为 `PARTIAL_SUCCESS`。
 - 自动兑换默认关闭；启用后仅在本次新签到成功时尝试兑换。
