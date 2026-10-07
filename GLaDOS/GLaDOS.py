@@ -4,11 +4,11 @@ name: GLaDOS 自动签到
 description: 多账号执行 GLaDOS 签到，并查询积分与剩余天数
 cron: 0 8 * * *
 env:
-  - GLADOS_COOKIES (必填): GLaDOS Cookie，多账号用 ||| 分割
+  - GLADOS_COOKIES (必填): GLaDOS Cookie，多账号用 |||、& 或换行分割
   - GLADOS_DOMAINS (选填): HTTPS 服务域名，多域名用 ||| 分割
   - GLADOS_EXCHANGE_PLAN (选填): 自动兑换计划，默认关闭
-version: 1.0.0
-updated: 2026-09-08
+version: 1.1.0
+updated: 2026-10-07
 disclaimer: 仅供学习交流，禁止用于商业用途，风险自负
 """
 
@@ -43,7 +43,6 @@ EXCHANGE_ENV_NAME = "GLADOS_EXCHANGE_PLAN"
 ACCOUNT_SEPARATOR = "|||"
 DEFAULT_DOMAIN = "glados.cloud"
 KNOWN_DOMAINS = frozenset({"glados.cloud", "railgun.info"})
-REQUIRED_COOKIE_KEYS = frozenset({"koa:sess", "koa:sess.sig"})
 EXCHANGE_PLANS = {"plan100": 100, "plan200": 200, "plan500": 500}
 DISABLED_VALUES = frozenset(
     {"", "0", "false", "off", "none", "disable", "disabled"}
@@ -56,6 +55,23 @@ REQUEST_TIMEOUT_SECONDS = 10
 MAX_REQUEST_ATTEMPTS = 3
 MAX_SERVICE_MESSAGE_LENGTH = 120
 ACCOUNT_DELAY_RANGE_SECONDS = (0.5, 1.5)
+REPEAT_KEYWORDS = ("repeat", "already", "重复", "已签到", "签到过", "请勿")
+AUTH_FAIL_KEYWORDS = (
+    "没有权限",
+    "权限不足",
+    "未登录",
+    "登录已失效",
+    "unauthorized",
+    "forbidden",
+    "invalid token",
+)
+SESSION_KEY_PATTERN = re.compile(
+    r"^(?P<prefix>[A-Za-z0-9_.-]+):sess(?P<signature>\.sig)?$"
+)
+COOKIE_FORMAT_HINT = (
+    "期望 Cookie 格式（前缀任意，sess 与 sess.sig 必须成对出现）；"
+    "请从 GLaDOS 浏览器 Cookie 中复制完整值"
+)
 
 
 class CheckinCode(IntEnum):
@@ -95,7 +111,7 @@ class Settings:
         raw_cookies = os.environ.get(COOKIE_ENV_NAME, "")
         cookies = tuple(
             normalize_cookie(item)
-            for item in raw_cookies.split(ACCOUNT_SEPARATOR)
+            for item in re.split(r"\|\|\||[&\n]", raw_cookies)
             if item.strip()
         )
 
@@ -148,12 +164,45 @@ class AccountResult:
 
 
 def normalize_cookie(raw_cookie: str) -> str:
-    """规范抓包工具可能产生的 Cookie 展示格式。"""
-    cookie = raw_cookie.strip().strip("\"'")
-    cookie = re.sub(r"[\r\n]+", "; ", cookie)
-    cookie = re.sub(r"koa:sess\.sig(?!=)", "koa:sess.sig=", cookie)
-    cookie = re.sub(r"koa:sess(?!\.sig)(?!=)", "koa:sess=", cookie)
+    """清理复制 Cookie 时混入的引号、空白和 ``Cookie:`` 头名。
+
+    不改写会话前缀。GLaDOS 当前可能使用 ``gld:``，旧账号仍可能
+    使用 ``koa:``，改写前缀会使服务端无法识别会话。
+    """
+    cookie = (raw_cookie or "").strip()
+    while len(cookie) >= 2 and cookie[0] == cookie[-1] and cookie[0] in "\"'":
+        cookie = cookie[1:-1].strip()
+    if cookie[:7].lower() == "cookie:":
+        cookie = cookie[7:].strip()
+        while (
+            len(cookie) >= 2
+            and cookie[0] == cookie[-1]
+            and cookie[0] in "\"'"
+        ):
+            cookie = cookie[1:-1].strip()
     return cookie
+
+
+def parse_session_prefixes(cookie: str) -> dict[str, dict[str, bool]]:
+    """解析任意前缀的 ``<prefix>:sess`` 会话字段。"""
+    found: dict[str, dict[str, bool]] = {}
+    for part in cookie.split(";"):
+        key = part.strip().split("=", maxsplit=1)[0].strip()
+        match = SESSION_KEY_PATTERN.fullmatch(key)
+        if not match:
+            continue
+        prefix = match.group("prefix")
+        field = "sig" if match.group("signature") else "sess"
+        found.setdefault(prefix, {})[field] = True
+    return found
+
+
+def extract_session_prefix(cookie: str) -> str | None:
+    """返回第一个同时包含 sess 与 sess.sig 的会话前缀。"""
+    for prefix, fields in parse_session_prefixes(cookie).items():
+        if fields.get("sess") and fields.get("sig"):
+            return prefix
+    return None
 
 
 def normalize_domain(raw_domain: str) -> str:
@@ -170,16 +219,41 @@ def normalize_domain(raw_domain: str) -> str:
 
 
 def validate_cookie(cookie: str) -> tuple[bool, str]:
-    """检查签到接口要求的 Cookie 字段，不记录字段值。"""
-    keys = {
-        part.split("=", maxsplit=1)[0].strip()
-        for part in cookie.split(";")
-        if "=" in part
-    }
-    missing = sorted(REQUIRED_COOKIE_KEYS - keys)
-    if missing:
-        return False, f"Cookie 缺少必要字段: {', '.join(missing)}"
-    return True, ""
+    """校验会话字段是否成对，兼容 GLaDOS 变更过的任意前缀。"""
+    cookie = normalize_cookie(cookie)
+    if not cookie:
+        return False, f"Cookie 为空；{COOKIE_FORMAT_HINT}"
+
+    groups = parse_session_prefixes(cookie)
+    complete = [
+        prefix
+        for prefix, fields in groups.items()
+        if fields.get("sess") and fields.get("sig")
+    ]
+    if complete:
+        return True, ""
+
+    actual = ", ".join(sorted(groups)) or "未解析到会话字段"
+    return False, (
+        "Cookie 会话字段不成对或缺失；"
+        f"实际键名: {actual}；{COOKIE_FORMAT_HINT}"
+    )
+
+
+def classify_checkin(code: Any, message: str) -> CheckinCode | None:
+    """按 API code 优先、消息关键词兜底识别签到结果。"""
+    parsed_code = parse_integer(code)
+    if parsed_code == CheckinCode.SUCCESS:
+        return CheckinCode.SUCCESS
+    if parsed_code == CheckinCode.ALREADY_CHECKED_IN:
+        return CheckinCode.ALREADY_CHECKED_IN
+
+    text = (message or "").lower()
+    if re.search(r"got\s+\d+\s+points?", text):
+        return CheckinCode.SUCCESS
+    if any(keyword in text for keyword in REPEAT_KEYWORDS):
+        return CheckinCode.ALREADY_CHECKED_IN
+    return None
 
 
 def compact_message(value: Any, fallback: str = "未知错误") -> str:
@@ -229,9 +303,15 @@ class GLaDOSClient:
         self,
         method: str,
         path: str,
+        *,
+        retryable: bool = True,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """请求 JSON 接口，对网络错误、429 和 5xx 有限重试。"""
+        """请求 JSON 接口，对可重试错误、429 和 5xx 有限重试。
+
+        积分兑换是会消耗余额的非幂等 POST，调用方可关闭重试，
+        避免首次请求已成功但响应丢失时重复扣分。
+        """
         url = f"https://{self.domain}{path}"
         last_error: Exception | None = None
 
@@ -258,14 +338,22 @@ class GLaDOSClient:
                 return payload
             except (requests.RequestException, ServiceError) as exc:
                 last_error = exc
-                retryable = isinstance(exc, requests.RequestException)
+                should_retry = retryable and isinstance(
+                    exc, requests.RequestException
+                )
                 if isinstance(exc, requests.HTTPError) and exc.response is not None:
                     status_code = exc.response.status_code
-                    retryable = status_code == 429 or status_code >= 500
+                    should_retry = retryable and (
+                        status_code == 429 or status_code >= 500
+                    )
                 if isinstance(exc, ServiceError):
-                    retryable = "HTTP 429" in str(exc) or "HTTP 5" in str(exc)
+                    should_retry = retryable and (
+                        "HTTP 429" in str(exc)
+                        or "HTTP 5" in str(exc)
+                        or "非 JSON" in str(exc)
+                    )
 
-                if not retryable or attempt == MAX_REQUEST_ATTEMPTS:
+                if not should_retry or attempt == MAX_REQUEST_ATTEMPTS:
                     break
                 wait_seconds = 2 ** (attempt - 1) + random.uniform(0, 0.5)
                 LOGGER.warning(
@@ -286,12 +374,8 @@ class GLaDOSClient:
             "/api/user/checkin",
             json={"token": self.domain},
         )
-        code_value = parse_integer(payload.get("code"))
         message = compact_message(payload.get("message"))
-        try:
-            code = CheckinCode(code_value) if code_value is not None else None
-        except ValueError:
-            code = None
+        code = classify_checkin(payload.get("code"), message)
         return code, message, parse_earned_points(message)
 
     def query_remaining_days(self) -> str:
@@ -318,6 +402,7 @@ class GLaDOSClient:
         payload = self._request_json(
             "POST",
             "/api/user/exchange",
+            retryable=False,
             data={"planType": plan},
         )
         code = parse_integer(payload.get("code"))
@@ -340,6 +425,11 @@ def execute_account(
         return AccountResult(account_name, ResultStatus.FAILED, reason)
 
     LOGGER.info("开始处理账号 %d，域名 %s", index, domain)
+    LOGGER.info(
+        "账号 %d 会话前缀识别为: %s",
+        index,
+        extract_session_prefix(cookie) or "未知",
+    )
     try:
         with GLaDOSClient(domain, cookie) as client:
             code, message, earned = client.checkin()
@@ -350,7 +440,14 @@ def execute_account(
                 return AccountResult(
                     account_name,
                     ResultStatus.FAILED,
-                    f"签到失败: {message}",
+                    (
+                        f"鉴权失败: {message}，请重新获取 Cookie"
+                        if any(
+                            keyword in message.lower()
+                            for keyword in AUTH_FAIL_KEYWORDS
+                        )
+                        else f"签到失败: {message}"
+                    ),
                 )
 
             detail_items = []
