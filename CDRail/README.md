@@ -18,6 +18,9 @@ CDRail/
 | 变量 | 必填 | 说明 |
 | --- | --- | --- |
 | `CDRAIL_HEADERS_JSON` | 是 | 抓包导出的完整请求头 JSON；多账号用 `|||` 分割 |
+| `QL_RANDOM_DELAY_ENABLED` | 否 | 是否启用任务启动随机延迟，默认 `true` |
+| `QL_RANDOM_DELAY_MIN_SECONDS` | 否 | 最小延迟秒数，默认 `0` |
+| `QL_RANDOM_DELAY_MAX_SECONDS` | 否 | 最大延迟秒数，默认 `300` |
 
 请求头至少需要 `Cookie` 或 `token` 字段。建议在成都地铁 App 中打开签到页面，
 从请求 `https://app.cdmetro.chengdurail.cn/platform/users/user/sign-in-integral`
@@ -57,5 +60,6 @@ python3 -m pip install -r CDRail/requirements.txt
 - 业务码 `0` 且消息为空或为 `SUCCESS` 视为签到成功；业务码 `1102` 视为今日已签到，
   两者均按幂等成功处理。
 - 每次请求超时为 10 秒；单账号异常不会中断后续账号。
+- 业务请求前默认随机等待 0 至 300 秒；可通过全局随机延迟变量关闭或调整范围。
 - 日志只显示账号序号和错误类型，不输出 Cookie、Token 或完整响应。
 - 最终结果通过根目录 `notification_adapter.py` 生成标准 Payload 并交给青龙官方通知模块。

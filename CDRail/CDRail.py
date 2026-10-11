@@ -5,8 +5,11 @@ description: 使用成都地铁 App 每日积分签到
 cron: 10 9 * * *
 env:
   - CDRAIL_HEADERS_JSON (必填): 抓包导出的请求头 JSON，多账号用 ||| 分割
-version: 1.0.0
-updated: 2026-10-09
+  - QL_RANDOM_DELAY_ENABLED (选填): 是否启用任务启动随机延迟，默认 true
+  - QL_RANDOM_DELAY_MIN_SECONDS (选填): 最小延迟秒数，默认 0
+  - QL_RANDOM_DELAY_MAX_SECONDS (选填): 最大延迟秒数，默认 300
+version: 1.1.0
+updated: 2026-10-11
 disclaimer: 仅供学习交流，禁止用于商业用途，风险自负
 """
 
@@ -32,6 +35,10 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from notification_adapter import send_payload  # noqa: E402
+from runtime_control import (  # noqa: E402
+    RandomDelayConfigurationError,
+    wait_for_random_delay,
+)
 
 
 LOGGER = logging.getLogger("cdrail")
@@ -322,6 +329,13 @@ def run() -> int:
                 f"缺少必填环境变量 {HEADERS_ENV_NAME}",
             )
         ]
+        notify_results(results)
+        return 1
+
+    try:
+        wait_for_random_delay(LOGGER)
+    except RandomDelayConfigurationError as exc:
+        results = [AccountResult("随机延迟配置", ResultStatus.FAILED, str(exc))]
         notify_results(results)
         return 1
 

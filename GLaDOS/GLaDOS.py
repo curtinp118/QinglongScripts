@@ -8,8 +8,11 @@ env:
   - GLADOS_DOMAINS (选填): HTTPS 服务域名，多域名用 ||| 分割
   - GLADOS_EXCHANGE_PLAN (选填): 自动兑换计划，默认关闭
   - GLADOS_USER_AGENT (选填): 登录浏览器完整 User-Agent，默认 Windows Chrome
-version: 1.2.0
-updated: 2026-10-07
+  - QL_RANDOM_DELAY_ENABLED (选填): 是否启用任务启动随机延迟，默认 true
+  - QL_RANDOM_DELAY_MIN_SECONDS (选填): 最小延迟秒数，默认 0
+  - QL_RANDOM_DELAY_MAX_SECONDS (选填): 最大延迟秒数，默认 300
+version: 1.3.0
+updated: 2026-10-11
 disclaimer: 仅供学习交流，禁止用于商业用途，风险自负
 """
 
@@ -35,6 +38,10 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from notification_adapter import send_payload  # noqa: E402
+from runtime_control import (  # noqa: E402
+    RandomDelayConfigurationError,
+    wait_for_random_delay,
+)
 
 
 LOGGER = logging.getLogger("glados")
@@ -625,6 +632,13 @@ def run() -> int:
                 f"缺少必填环境变量 {COOKIE_ENV_NAME}",
             )
         ]
+        notify_results(results)
+        return 1
+
+    try:
+        wait_for_random_delay(LOGGER)
+    except RandomDelayConfigurationError as exc:
+        results = [AccountResult("随机延迟配置", ResultStatus.FAILED, str(exc))]
         notify_results(results)
         return 1
 

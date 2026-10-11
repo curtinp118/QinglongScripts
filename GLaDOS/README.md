@@ -21,6 +21,9 @@ GLaDOS/
 | `GLADOS_DOMAINS` | 否 | 服务域名，多域名用 `|||` 分隔，默认 `glados.cloud` |
 | `GLADOS_EXCHANGE_PLAN` | 否 | `plan100`、`plan200` 或 `plan500`，默认关闭 |
 | `GLADOS_USER_AGENT` | 否 | 登录浏览器完整 User-Agent；新版设备校验失败时必须配置 |
+| `QL_RANDOM_DELAY_ENABLED` | 否 | 是否启用任务启动随机延迟，默认 `true` |
+| `QL_RANDOM_DELAY_MIN_SECONDS` | 否 | 最小延迟秒数，默认 `0` |
+| `QL_RANDOM_DELAY_MAX_SECONDS` | 否 | 最大延迟秒数，默认 `300` |
 
 `GLADOS_DOMAINS` 支持 GLaDOS 官方主站（`glados.network`、`glados.rocks`、
 `glados.one`、`glados.space`、`glados.cloud`、`glados.vip`、
@@ -70,6 +73,7 @@ python3 -m pip install -r GLaDOS/requirements.txt
   `device-mismatch`，请在登录 Cookie 的同一个浏览器打开 `chrome://version`，复制完整
   User-Agent 设置到 `GLADOS_USER_AGENT`。未配置时使用 Windows Chrome 默认值。
 - 单次请求超时为 10 秒；网络错误、HTTP 429 和 5xx 最多尝试 3 次。
+- 业务请求前默认随机等待 0 至 300 秒；可通过全局随机延迟变量关闭或调整范围。
 - 单账号失败不会中止后续账号，最终状态可能为 `PARTIAL_SUCCESS`。
 - 自动兑换默认关闭；启用后仅在本次新签到成功时尝试兑换。
 - 兑换请求不重试（兑换会消耗积分且不是幂等操作），避免响应丢失导致重复扣分。

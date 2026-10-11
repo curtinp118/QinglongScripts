@@ -30,8 +30,8 @@
 | 定时类型 | `crontab` |
 | 定时规则 | `0 3 * * *` |
 | 白名单 | `^(GLaDOS|V2EX|CDRail)/` |
-| 黑名单 | `(^|/)(notify|notification_adapter)\.py$` |
-| 依赖文件 | `notification_adapter|notify` |
+| 黑名单 | `(^|/)(notify|notification_adapter|runtime_control)\.py$` |
+| 依赖文件 | `notification_adapter|notify|runtime_control` |
 | 文件后缀 | `py` |
 | 自动添加任务 | 开启 |
 | 自动删除任务 | 开启 |
@@ -40,11 +40,12 @@
 仍需在表单中填写：
 
 ```bash
-ql repo "https://github.com/curtinp118/QinglongScripts.git" "^(GLaDOS|V2EX|CDRail)/" "(^|/)(notify|notification_adapter)\.py$" "notification_adapter|notify" "main" "py"
+ql repo "https://github.com/curtinp118/QinglongScripts.git" "^(GLaDOS|V2EX|CDRail)/" "(^|/)(notify|notification_adapter|runtime_control)\.py$" "notification_adapter|notify|runtime_control" "main" "py"
 ```
 
-白名单决定哪些入口脚本参与自动建任务；黑名单明确排除 `notify.py` 和
-`notification_adapter.py`，依赖文件字段再将它们复制到脚本目录供入口脚本导入。
+白名单决定哪些入口脚本参与自动建任务；黑名单明确排除 `notify.py`、
+`notification_adapter.py` 和 `runtime_control.py`，依赖文件字段再将它们复制到
+脚本目录供入口脚本导入。
 后续订阅多个项目时，将目录名加入白名单正则的括号内并使用 `|` 分隔。白名单、
 黑名单和依赖文件均支持关键词或正则表达式。
 
@@ -102,6 +103,7 @@ task <订阅唯一值>/CDRail/CDRail.py
 | [`requirements.txt`](./requirements.txt) | 全部 Python 脚本的依赖汇总 |
 | [`notify.py`](./notify.py) | 青龙面板官方 Python 通知模块 |
 | [`notification_adapter.py`](./notification_adapter.py) | 标准 Payload 到官方通知接口的适配器 |
+| [`runtime_control.py`](./runtime_control.py) | 统一解析并执行任务启动随机延迟 |
 
 ## 通用变量
 
@@ -112,6 +114,9 @@ task <订阅唯一值>/CDRail/CDRail.py
 
 | 变量 | 说明 |
 | --- | --- |
+| `QL_RANDOM_DELAY_ENABLED` | 是否在业务请求前随机延迟，默认 `true`；支持 `true/false`、`1/0`、`yes/no`、`on/off` |
+| `QL_RANDOM_DELAY_MIN_SECONDS` | 随机延迟下限，默认 `0` 秒，支持 `0` 至 `86400` 的整数 |
+| `QL_RANDOM_DELAY_MAX_SECONDS` | 随机延迟上限，默认 `300` 秒，支持 `0` 至 `86400` 的整数且不得小于下限 |
 | `HITOKOTO` | 是否在通知末尾附加一言，设置为 `false` 可关闭 |
 | `CONSOLE` | 是否启用控制台通知输出 |
 | `SKIP_PUSH_TITLE` | 按通知标题跳过推送，多个标题使用换行分隔 |
@@ -167,10 +172,11 @@ Token、签名等认证数据不会进入通知 Payload。
 
 ### 公共通知模块被自动添加为任务
 
-将订阅黑名单设置为 `(^|/)(notify|notification_adapter)\.py$`，依赖文件保持
-`notification_adapter|notify`，并确认“自动删除任务”已开启。重新运行一次订阅后，
-青龙会保留公共模块文件，同时从任务列表移除错误创建的任务；未开启自动删除时需
-手动删除对应任务。
+将订阅黑名单设置为
+`(^|/)(notify|notification_adapter|runtime_control)\.py$`，依赖文件保持
+`notification_adapter|notify|runtime_control`，并确认“自动删除任务”已开启。
+重新运行一次订阅后，青龙会保留公共模块文件，同时从任务列表移除错误创建的任务；
+未开启自动删除时需手动删除对应任务。
 
 ### 提示 `ModuleNotFoundError`
 
