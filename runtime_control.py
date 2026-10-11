@@ -14,16 +14,41 @@ from dataclasses import dataclass
 RANDOM_DELAY_ENABLED_ENV_NAME = "QL_RANDOM_DELAY_ENABLED"
 RANDOM_DELAY_MIN_ENV_NAME = "QL_RANDOM_DELAY_MIN_SECONDS"
 RANDOM_DELAY_MAX_ENV_NAME = "QL_RANDOM_DELAY_MAX_SECONDS"
+LOG_LEVEL_ENV_NAME = "QL_LOG_LEVEL"
+DEFAULT_LOG_LEVEL = "INFO"
 DEFAULT_RANDOM_DELAY_ENABLED = True
 DEFAULT_RANDOM_DELAY_MIN_SECONDS = 0
 DEFAULT_RANDOM_DELAY_MAX_SECONDS = 300
 MAX_RANDOM_DELAY_SECONDS = 86_400
 TRUE_VALUES = frozenset({"1", "true", "yes", "on", "enable", "enabled"})
 FALSE_VALUES = frozenset({"0", "false", "no", "off", "disable", "disabled"})
+SUPPORTED_LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
 
 
 class RandomDelayConfigurationError(ValueError):
     """随机延迟环境变量配置不合法。"""
+
+
+def configure_logging(logger: logging.Logger) -> None:
+    """按全局环境变量初始化统一日志格式和级别。"""
+    raw_level = os.environ.get(LOG_LEVEL_ENV_NAME, DEFAULT_LOG_LEVEL)
+    level_name = raw_level.strip().upper() or DEFAULT_LOG_LEVEL
+    if level_name not in SUPPORTED_LOG_LEVELS:
+        level_name = DEFAULT_LOG_LEVEL
+
+    logging.basicConfig(
+        level=getattr(logging, level_name),
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    logger.setLevel(getattr(logging, level_name))
+    if raw_level.strip() and raw_level.strip().upper() not in SUPPORTED_LOG_LEVELS:
+        logger.warning(
+            "%s=%s 无效，已使用默认级别 %s",
+            LOG_LEVEL_ENV_NAME,
+            raw_level.strip(),
+            DEFAULT_LOG_LEVEL,
+        )
 
 
 @dataclass(frozen=True)

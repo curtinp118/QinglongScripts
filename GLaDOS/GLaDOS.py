@@ -11,7 +11,8 @@ env:
   - QL_RANDOM_DELAY_ENABLED (选填): 是否启用任务启动随机延迟，默认 true
   - QL_RANDOM_DELAY_MIN_SECONDS (选填): 最小延迟秒数，默认 0
   - QL_RANDOM_DELAY_MAX_SECONDS (选填): 最大延迟秒数，默认 300
-version: 1.3.0
+  - QL_LOG_LEVEL (选填): 日志级别，默认 INFO，可设 DEBUG/INFO/WARNING/ERROR
+version: 1.3.1
 updated: 2026-10-11
 disclaimer: 仅供学习交流，禁止用于商业用途，风险自负
 """
@@ -40,6 +41,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from notification_adapter import send_payload  # noqa: E402
 from runtime_control import (  # noqa: E402
     RandomDelayConfigurationError,
+    configure_logging,
     wait_for_random_delay,
 )
 
@@ -513,7 +515,11 @@ def execute_account(
                 points_label, total_points = client.query_total_points()
                 detail_items.append(f"总积分 {points_label}")
             except ServiceError as exc:
-                LOGGER.warning("账号 %d 积分查询失败: %s", index, exc)
+                LOGGER.warning(
+                    "账号 %d 积分查询失败: %s",
+                    index,
+                    type(exc).__name__,
+                )
                 detail_items.append("总积分未知")
 
             try:
@@ -521,7 +527,11 @@ def execute_account(
                     f"剩余时间 {client.query_remaining_days()}"
                 )
             except ServiceError as exc:
-                LOGGER.warning("账号 %d剩余时间查询失败: %s", index, exc)
+                LOGGER.warning(
+                    "账号 %d 剩余时间查询失败: %s",
+                    index,
+                    type(exc).__name__,
+                )
                 detail_items.append("剩余时间未知")
 
             exchange_failed = False
@@ -546,7 +556,11 @@ def execute_account(
                         detail_items.append(exchange_detail)
                     except ServiceError as exc:
                         exchange_failed = True
-                        LOGGER.warning("账号 %d 自动兑换失败: %s", index, exc)
+                        LOGGER.warning(
+                            "账号 %d 自动兑换失败: %s",
+                            index,
+                            type(exc).__name__,
+                        )
                         detail_items.append("自动兑换异常")
 
             return AccountResult(
@@ -563,8 +577,8 @@ def execute_account(
             "账号 %d 在 %s 执行失败: %s",
             index,
             domain,
-            exc,
-            exc_info=True,
+            type(exc).__name__,
+            exc_info=LOGGER.isEnabledFor(logging.DEBUG),
         )
         return AccountResult(
             account_name,
@@ -609,7 +623,11 @@ def notify_results(results: list[AccountResult]) -> bool:
         send_payload(build_payload(results))
         return True
     except Exception as exc:
-        LOGGER.error("通知调用失败: %s", exc, exc_info=True)
+        LOGGER.error(
+            "通知调用失败: %s",
+            type(exc).__name__,
+            exc_info=LOGGER.isEnabledFor(logging.DEBUG),
+        )
         return False
 
 
@@ -618,6 +636,7 @@ def run() -> int:
     try:
         settings = Settings.from_environment()
     except ConfigurationError as exc:
+        LOGGER.error("配置检查失败: %s", str(exc))
         results = [
             AccountResult("配置检查", ResultStatus.FAILED, str(exc))
         ]
@@ -625,6 +644,7 @@ def run() -> int:
         return 1
 
     if not settings.cookies:
+        LOGGER.error("配置检查失败: 缺少环境变量 %s", COOKIE_ENV_NAME)
         results = [
             AccountResult(
                 "配置检查",
@@ -638,6 +658,7 @@ def run() -> int:
     try:
         wait_for_random_delay(LOGGER)
     except RandomDelayConfigurationError as exc:
+        LOGGER.error("随机延迟配置失败: %s", str(exc))
         results = [AccountResult("随机延迟配置", ResultStatus.FAILED, str(exc))]
         notify_results(results)
         return 1
@@ -650,21 +671,25 @@ def run() -> int:
     results = []
     for task_index, (index, domain, cookie) in enumerate(tasks):
         try:
-            results.append(
-                execute_account(
-                    index,
-                    domain,
-                    cookie,
-                    settings.exchange_plan,
-                )
+            result = execute_account(
+                index,
+                domain,
+                cookie,
+                settings.exchange_plan,
+            )
+            results.append(result)
+            LOGGER.info(
+                "%s 处理完成，状态=%s",
+                result.name,
+                result.status.value,
             )
         except Exception as exc:
             LOGGER.error(
                 "账号 %d 在 %s 出现未预期异常: %s",
                 index,
                 domain,
-                exc,
-                exc_info=True,
+                type(exc).__name__,
+                exc_info=LOGGER.isEnabledFor(logging.DEBUG),
             )
             results.append(
                 AccountResult(
@@ -676,6 +701,15 @@ def run() -> int:
         if task_index < len(tasks) - 1:
             time.sleep(random.uniform(*ACCOUNT_DELAY_RANGE_SECONDS))
 
+    success_count = sum(
+        result.status == ResultStatus.SUCCESS for result in results
+    )
+    LOGGER.info(
+        "任务完成，账号任务=%d，成功=%d，失败=%d",
+        len(results),
+        success_count,
+        len(results) - success_count,
+    )
     notification_ok = notify_results(results)
     all_succeeded = calculate_global_status(results) == ResultStatus.SUCCESS
     return 0 if all_succeeded and notification_ok else 1
@@ -683,11 +717,7 @@ def run() -> int:
 
 def main() -> int:
     """配置日志并运行青龙入口。"""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+    configure_logging(LOGGER)
     return run()
 
 

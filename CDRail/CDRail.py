@@ -8,7 +8,8 @@ env:
   - QL_RANDOM_DELAY_ENABLED (选填): 是否启用任务启动随机延迟，默认 true
   - QL_RANDOM_DELAY_MIN_SECONDS (选填): 最小延迟秒数，默认 0
   - QL_RANDOM_DELAY_MAX_SECONDS (选填): 最大延迟秒数，默认 300
-version: 1.1.0
+  - QL_LOG_LEVEL (选填): 日志级别，默认 INFO，可设 DEBUG/INFO/WARNING/ERROR
+version: 1.1.1
 updated: 2026-10-11
 disclaimer: 仅供学习交流，禁止用于商业用途，风险自负
 """
@@ -37,6 +38,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from notification_adapter import send_payload  # noqa: E402
 from runtime_control import (  # noqa: E402
     RandomDelayConfigurationError,
+    configure_logging,
     wait_for_random_delay,
 )
 
@@ -237,14 +239,18 @@ def execute_account(index: int, headers: dict[str, str]) -> AccountResult:
         with CDRailClient(headers) as client:
             code, message, increment = client.checkin()
     except ServiceError as exc:
-        LOGGER.error("账号 %d 执行失败: %s", index, exc, exc_info=True)
+        LOGGER.warning(
+            "账号 %d 执行失败: %s",
+            index,
+            type(exc).__name__,
+        )
         return AccountResult(account_name, ResultStatus.FAILED, compact_message(exc))
     except Exception as exc:
         LOGGER.error(
             "账号 %d 出现未预期异常: %s",
             index,
             type(exc).__name__,
-            exc_info=True,
+            exc_info=LOGGER.isEnabledFor(logging.DEBUG),
         )
         return AccountResult(
             account_name,
@@ -308,7 +314,11 @@ def notify_results(results: list[AccountResult]) -> bool:
         send_payload(build_payload(results))
         return True
     except Exception as exc:
-        LOGGER.error("通知调用失败: %s", exc, exc_info=True)
+        LOGGER.error(
+            "通知调用失败: %s",
+            type(exc).__name__,
+            exc_info=LOGGER.isEnabledFor(logging.DEBUG),
+        )
         return False
 
 
@@ -317,11 +327,13 @@ def run() -> int:
     try:
         headers_list = load_headers()
     except ConfigurationError as exc:
+        LOGGER.error("配置检查失败: %s", str(exc))
         results = [AccountResult("配置检查", ResultStatus.FAILED, str(exc))]
         notify_results(results)
         return 1
 
     if not headers_list:
+        LOGGER.error("配置检查失败: 缺少环境变量 %s", HEADERS_ENV_NAME)
         results = [
             AccountResult(
                 "配置检查",
@@ -335,16 +347,32 @@ def run() -> int:
     try:
         wait_for_random_delay(LOGGER)
     except RandomDelayConfigurationError as exc:
+        LOGGER.error("随机延迟配置失败: %s", str(exc))
         results = [AccountResult("随机延迟配置", ResultStatus.FAILED, str(exc))]
         notify_results(results)
         return 1
 
     results: list[AccountResult] = []
     for offset, headers in enumerate(headers_list):
-        results.append(execute_account(offset + 1, headers))
+        result = execute_account(offset + 1, headers)
+        results.append(result)
+        LOGGER.info(
+            "%s 处理完成，状态=%s",
+            result.name,
+            result.status.value,
+        )
         if offset < len(headers_list) - 1:
             time.sleep(random.uniform(*ACCOUNT_DELAY_RANGE_SECONDS))
 
+    success_count = sum(
+        result.status == ResultStatus.SUCCESS for result in results
+    )
+    LOGGER.info(
+        "任务完成，账号=%d，成功=%d，失败=%d",
+        len(results),
+        success_count,
+        len(results) - success_count,
+    )
     notification_ok = notify_results(results)
     return (
         0
@@ -356,11 +384,7 @@ def run() -> int:
 
 def main() -> int:
     """配置日志并运行青龙入口。"""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+    configure_logging(LOGGER)
     return run()
 
 

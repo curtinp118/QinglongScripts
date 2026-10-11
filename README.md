@@ -117,9 +117,14 @@ task <订阅唯一值>/CDRail/CDRail.py
 | `QL_RANDOM_DELAY_ENABLED` | 是否在业务请求前随机延迟，默认 `true`；支持 `true/false`、`1/0`、`yes/no`、`on/off` |
 | `QL_RANDOM_DELAY_MIN_SECONDS` | 随机延迟下限，默认 `0` 秒，支持 `0` 至 `86400` 的整数 |
 | `QL_RANDOM_DELAY_MAX_SECONDS` | 随机延迟上限，默认 `300` 秒，支持 `0` 至 `86400` 的整数且不得小于下限 |
+| `QL_LOG_LEVEL` | 日志级别，默认 `INFO`；支持 `DEBUG`、`INFO`、`WARNING`、`ERROR`、`CRITICAL` |
 | `HITOKOTO` | 是否在通知末尾附加一言，设置为 `false` 可关闭 |
 | `CONSOLE` | 是否启用控制台通知输出 |
 | `SKIP_PUSH_TITLE` | 按通知标题跳过推送，多个标题使用换行分隔 |
+
+业务脚本日志只输出任务阶段、账号序号/域名、状态和错误类型，不输出 Cookie、Token
+或完整响应。预期的网络和账号失败不会打印 traceback；需要排查未预期异常时，将青龙
+日志级别调整为 `DEBUG` 才会附加 traceback。
 
 ### 通知渠道
 

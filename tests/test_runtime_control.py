@@ -9,6 +9,7 @@ from unittest.mock import patch
 from runtime_control import (
     RandomDelayConfigurationError,
     RandomDelaySettings,
+    configure_logging,
     wait_for_random_delay,
 )
 
@@ -87,6 +88,17 @@ class WaitForRandomDelayTest(unittest.TestCase):
         self.assertEqual(delay, 0)
         randint_mock.assert_not_called()
         sleep_mock.assert_not_called()
+
+    def test_logging_level_can_be_enabled_for_diagnostics(self) -> None:
+        logger = logging.getLogger("runtime-control-test")
+        with patch.dict(
+            os.environ,
+            {"QL_LOG_LEVEL": "debug"},
+            clear=True,
+        ):
+            configure_logging(logger)
+
+        self.assertEqual(logger.level, logging.DEBUG)
 
 
 if __name__ == "__main__":

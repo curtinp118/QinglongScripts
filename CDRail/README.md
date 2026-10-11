@@ -21,6 +21,7 @@ CDRail/
 | `QL_RANDOM_DELAY_ENABLED` | 否 | 是否启用任务启动随机延迟，默认 `true` |
 | `QL_RANDOM_DELAY_MIN_SECONDS` | 否 | 最小延迟秒数，默认 `0` |
 | `QL_RANDOM_DELAY_MAX_SECONDS` | 否 | 最大延迟秒数，默认 `300` |
+| `QL_LOG_LEVEL` | 否 | 日志级别，默认 `INFO`；支持 `DEBUG`、`INFO`、`WARNING`、`ERROR`、`CRITICAL` |
 
 请求头至少需要 `Cookie` 或 `token` 字段。建议在成都地铁 App 中打开签到页面，
 从请求 `https://app.cdmetro.chengdurail.cn/platform/users/user/sign-in-integral`
