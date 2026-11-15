@@ -1,31 +1,33 @@
 # -*- coding: utf-8 -*-
 """
 name: GLaDOS 自动签到
-description: 多账号执行 GLaDOS 签到，并查询积分与剩余天数
+description: 多账号探测登录域名、完成 challenge 签到并查询积分与剩余天数
 cron: 0 8 * * *
 env:
-  - GLADOS_COOKIES (必填): GLaDOS Cookie，多账号用 |||、& 或换行分割
-  - GLADOS_DOMAINS (选填): HTTPS 服务域名，多域名用 ||| 分割
+  - GLADOS_COOKIES (必填): 账号 JSON 数组，兼容 Cookie 用 |||、& 或换行分割
+  - GLADOS_DOMAINS (选填): 候选 HTTPS 域名，用 ||| 分割，默认探测内置域名
   - GLADOS_EXCHANGE_PLAN (选填): 自动兑换计划，默认关闭
   - GLADOS_USER_AGENT (选填): 登录浏览器完整 User-Agent，默认 Windows Chrome
   - QL_RANDOM_DELAY_ENABLED (选填): 是否启用任务启动随机延迟，默认 true
   - QL_RANDOM_DELAY_MIN_SECONDS (选填): 最小延迟秒数，默认 0
   - QL_RANDOM_DELAY_MAX_SECONDS (选填): 最大延迟秒数，默认 300
   - QL_LOG_LEVEL (选填): 日志级别，默认 INFO，可设 DEBUG/INFO/WARNING/ERROR
-version: 1.3.1
-updated: 2026-10-11
+version: 1.4.0
+updated: 2026-11-15
 disclaimer: 仅供学习交流，禁止用于商业用途，风险自负
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
 import random
 import re
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, IntEnum
 from pathlib import Path
@@ -52,19 +54,17 @@ DOMAIN_ENV_NAME = "GLADOS_DOMAINS"
 EXCHANGE_ENV_NAME = "GLADOS_EXCHANGE_PLAN"
 USER_AGENT_ENV_NAME = "GLADOS_USER_AGENT"
 ACCOUNT_SEPARATOR = "|||"
-DEFAULT_DOMAIN = "glados.cloud"
-KNOWN_DOMAINS = frozenset(
-    {
-        "glados.network",
-        "glados.rocks",
-        "glados.one",
-        "glados.space",
-        "glados.cloud",
-        "glados.vip",
-        "glados-facility.com",
-        "railgun.info",
-    }
+DEFAULT_DOMAINS = (
+    "glados.cloud",
+    "railgun.info",
+    "glados.network",
+    "glados.rocks",
+    "glados.one",
+    "glados.space",
+    "glados.vip",
+    "glados-facility.com",
 )
+KNOWN_DOMAINS = frozenset(DEFAULT_DOMAINS)
 EXCHANGE_PLANS = {"plan100": 100, "plan200": 200, "plan500": 500}
 DISABLED_VALUES = frozenset(
     {"", "0", "false", "off", "none", "disable", "disabled"}
@@ -77,12 +77,37 @@ REQUEST_TIMEOUT_SECONDS = 10
 MAX_REQUEST_ATTEMPTS = 3
 MAX_SERVICE_MESSAGE_LENGTH = 120
 ACCOUNT_DELAY_RANGE_SECONDS = (0.5, 1.5)
+# 与上游网页协议一致：nonce 获取后至少等待 2.5 秒再提交 proof。
+CHALLENGE_SUFFIX = "glados-observe-v1"
+CHALLENGE_DELAY_SECONDS = 2.5
+MAX_LEFT_DAYS = 36_500  # 超过约 100 年的剩余天数视为异常数据。
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/120.0.0.0 Safari/537.36"
 )
-REPEAT_KEYWORDS = ("repeat", "already", "重复", "已签到", "签到过", "请勿")
+PLATFORM_USER_AGENTS = {
+    "Windows": DEFAULT_USER_AGENT,
+    "macOS": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/156.0.0.0 Safari/537.36"
+    ),
+    "Linux": (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "iPhone": (
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) "
+        "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+        "Version/16.0 Mobile/15E148 Safari/604.1"
+    ),
+    "Android": (
+        "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+    ),
+}
+PLATFORM_USER_AGENTS["iOS"] = PLATFORM_USER_AGENTS["iPhone"]
 AUTH_FAIL_KEYWORDS = (
     "没有权限",
     "权限不足",
@@ -108,8 +133,10 @@ COOKIE_FORMAT_HINT = (
 class CheckinCode(IntEnum):
     """GLaDOS 签到接口的已知业务状态码。"""
 
+    PERMISSION_DENIED = -2
     SUCCESS = 0
     ALREADY_CHECKED_IN = 1
+    DEVICE_REJECTED = 4  # 设备校验失败，reason 区分是否为平台不匹配。
 
 
 class ResultStatus(str, Enum):
@@ -128,25 +155,36 @@ class ServiceError(RuntimeError):
     """GLaDOS 服务请求或响应不合法。"""
 
 
+class AuthenticationError(ServiceError):
+    """服务端明确拒绝当前登录凭证。"""
+
+
+@dataclass(frozen=True)
+class AccountSettings:
+    """单账号配置；凭证不进入对象的调试表示。"""
+
+    cookie: str = field(repr=False)
+    name: str = ""
+    origin: str = ""
+    user_agent: str = ""
+
+
 @dataclass(frozen=True)
 class Settings:
     """经过校验的脚本配置。"""
 
-    cookies: tuple[str, ...]
+    accounts: tuple[AccountSettings, ...]
     domains: tuple[str, ...]
     exchange_plan: str | None
 
     @classmethod
     def from_environment(cls) -> "Settings":
         """从项目专用环境变量读取配置。"""
-        raw_cookies = os.environ.get(COOKIE_ENV_NAME, "")
-        cookies = tuple(
-            normalize_cookie(item)
-            for item in re.split(r"\|\|\||[&\n]", raw_cookies)
-            if item.strip()
-        )
+        accounts = parse_accounts(os.environ.get(COOKIE_ENV_NAME, ""))
 
-        raw_domains = os.environ.get(DOMAIN_ENV_NAME, DEFAULT_DOMAIN)
+        raw_domains = os.environ.get(
+            DOMAIN_ENV_NAME, ACCOUNT_SEPARATOR.join(DEFAULT_DOMAINS)
+        )
         domain_items = (
             normalize_domain(item)
             for item in raw_domains.split(ACCOUNT_SEPARATOR)
@@ -171,7 +209,7 @@ class Settings:
                 f"{', '.join(EXCHANGE_PLANS)}"
             )
         return cls(
-            cookies=cookies,
+            accounts=accounts,
             domains=domains,
             exchange_plan=exchange_plan,
         )
@@ -192,6 +230,62 @@ class AccountResult:
             "status": self.status.value,
             "detail": self.detail,
         }
+
+
+def parse_accounts(raw: str) -> tuple[AccountSettings, ...]:
+    """兼容上游账号对象数组和已有的 Cookie 分隔符配置，并去重。"""
+    text = raw.lstrip("\ufeff").strip()
+    if not text:
+        return ()
+    entries: list[AccountSettings] = []
+    if text.startswith(("[", "{")):
+        try:
+            items = json.loads(text)
+        except ValueError as exc:
+            raise ConfigurationError(
+                f"{COOKIE_ENV_NAME} 不是合法 JSON 数组"
+            ) from exc
+        if not isinstance(items, list) or not items:
+            raise ConfigurationError(
+                f"{COOKIE_ENV_NAME} 必须是非空账号对象数组"
+            )
+        allowed_fields = {"cookie", "name", "origin", "user-agent"}
+        for index, item in enumerate(items, start=1):
+            if (
+                not isinstance(item, dict)
+                or set(item) - allowed_fields
+                or any(not isinstance(value, str) for value in item.values())
+                or not item.get("cookie", "").strip()
+            ):
+                raise ConfigurationError(
+                    f"第 {index} 项账号格式无效；只支持字符串字段 "
+                    "cookie、name、origin、user-agent，且 cookie 必填"
+                )
+            origin = item.get("origin", "").strip()
+            entries.append(
+                AccountSettings(
+                    cookie=normalize_cookie(item["cookie"]),
+                    name=" ".join(item.get("name", "").split()),
+                    origin=normalize_domain(origin) if origin else "",
+                    user_agent=" ".join(item.get("user-agent", "").split()),
+                )
+            )
+    else:
+        entries = [
+            AccountSettings(cookie=normalize_cookie(item))
+            for item in re.split(r"\|\|\||[&\n]", text)
+            if item.strip()
+        ]
+
+    unique: list[AccountSettings] = []
+    seen: set[str] = set()
+    for entry in entries:
+        if entry.cookie in seen:
+            LOGGER.warning("检测到重复 Cookie，已跳过重复账号")
+            continue
+        seen.add(entry.cookie)
+        unique.append(entry)
+    return tuple(unique)
 
 
 def normalize_cookie(raw_cookie: str) -> str:
@@ -218,22 +312,16 @@ def parse_session_prefixes(cookie: str) -> dict[str, dict[str, bool]]:
     """解析任意前缀的 ``<prefix>:sess`` 会话字段。"""
     found: dict[str, dict[str, bool]] = {}
     for part in cookie.split(";"):
-        key = part.strip().split("=", maxsplit=1)[0].strip()
-        match = SESSION_KEY_PATTERN.fullmatch(key)
+        key, separator, value = part.strip().partition("=")
+        if not separator or not value.strip():
+            continue
+        match = SESSION_KEY_PATTERN.fullmatch(key.strip())
         if not match:
             continue
         prefix = match.group("prefix")
         field = "sig" if match.group("signature") else "sess"
         found.setdefault(prefix, {})[field] = True
     return found
-
-
-def extract_session_prefix(cookie: str) -> str | None:
-    """返回第一个同时包含 sess 与 sess.sig 的会话前缀。"""
-    for prefix, fields in parse_session_prefixes(cookie).items():
-        if fields.get("sess") and fields.get("sig"):
-            return prefix
-    return None
 
 
 def normalize_domain(raw_domain: str) -> str:
@@ -243,9 +331,9 @@ def normalize_domain(raw_domain: str) -> str:
         raise ConfigurationError("自定义域名必须使用 HTTPS")
     domain = re.sub(r"^https://", "", domain)
     if any(character in domain for character in ("/", "@", ":", "?", "#")):
-        raise ConfigurationError(f"域名格式无效: {domain}")
+        raise ConfigurationError("域名格式无效；只允许 HTTPS 纯主机名")
     if not DOMAIN_PATTERN.fullmatch(domain):
-        raise ConfigurationError(f"域名格式无效: {domain}")
+        raise ConfigurationError("域名格式无效；只允许 HTTPS 纯主机名")
     return domain
 
 
@@ -254,6 +342,8 @@ def validate_cookie(cookie: str) -> tuple[bool, str]:
     cookie = normalize_cookie(cookie)
     if not cookie:
         return False, f"Cookie 为空；{COOKIE_FORMAT_HINT}"
+    if any(character in cookie for character in ("\r", "\n", "\0")):
+        return False, "Cookie 包含非法控制字符，请重新复制完整请求头"
 
     groups = parse_session_prefixes(cookie)
     complete = [
@@ -264,25 +354,42 @@ def validate_cookie(cookie: str) -> tuple[bool, str]:
     if complete:
         return True, ""
 
-    actual = ", ".join(sorted(groups)) or "未解析到会话字段"
     return False, (
         "Cookie 会话字段不成对或缺失；"
-        f"实际键名: {actual}；{COOKIE_FORMAT_HINT}"
+        f"{COOKIE_FORMAT_HINT}"
     )
 
 
-def classify_checkin(code: Any, message: str) -> CheckinCode | None:
-    """按 API code 优先、消息关键词兜底识别签到结果。"""
-    parsed_code = parse_integer(code)
+def classify_checkin(
+    code: Any,
+    message: str,
+    *,
+    repeated: Any = None,
+    checked_in: Any = None,
+    reason: Any = None,
+) -> CheckinCode | None:
+    """按上游网页判定顺序处理拒绝、repeated、code 和 checkedIn。"""
+    parsed_code = parse_api_code(code)
+    if "please checkin via" in message.lower():
+        return None
+    if (
+        parsed_code == CheckinCode.DEVICE_REJECTED
+        and reason == "device-mismatch"
+    ):
+        return None
+    if isinstance(repeated, bool):
+        if repeated:
+            return CheckinCode.ALREADY_CHECKED_IN
+        return (
+            CheckinCode.SUCCESS
+            if parsed_code == CheckinCode.SUCCESS
+            else None
+        )
     if parsed_code == CheckinCode.SUCCESS:
         return CheckinCode.SUCCESS
     if parsed_code == CheckinCode.ALREADY_CHECKED_IN:
         return CheckinCode.ALREADY_CHECKED_IN
-
-    text = (message or "").lower()
-    if re.search(r"got\s+\d+\s+points?", text):
-        return CheckinCode.SUCCESS
-    if any(keyword in text for keyword in REPEAT_KEYWORDS):
+    if checked_in is True:
         return CheckinCode.ALREADY_CHECKED_IN
     return None
 
@@ -290,15 +397,37 @@ def classify_checkin(code: Any, message: str) -> CheckinCode | None:
 def compact_message(value: Any, fallback: str = "未知错误") -> str:
     """压缩服务消息，避免日志或通知出现超长响应。"""
     message = " ".join(str(value or fallback).split())
+    message = re.sub(
+        r"([A-Za-z0-9_.-]+:sess(?:\.sig)?\s*=\s*)[^;\s]+",
+        r"\1[REDACTED]",
+        message,
+    )
+    message = re.sub(
+        r"(?i)(Bearer\s+)[A-Za-z0-9._~+/-]+=*",
+        r"\1[REDACTED]",
+        message,
+    )
     return message[:MAX_SERVICE_MESSAGE_LENGTH]
 
 
 def parse_integer(value: Any) -> int | None:
     """防御性解析接口中的整数值。"""
+    if isinstance(value, bool):
+        return None
     try:
         return int(float(value))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
+
+
+def parse_api_code(value: Any) -> int | None:
+    """业务状态码必须为整数，不能将小数截断成成功状态。"""
+    parsed = parse_integer(value)
+    if parsed is None:
+        return None
+    if isinstance(value, str):
+        return parsed if re.fullmatch(r"[+-]?\d+", value.strip()) else None
+    return parsed if value == parsed else None
 
 
 def parse_earned_points(message: str) -> int:
@@ -309,6 +438,19 @@ def parse_earned_points(message: str) -> int:
         flags=re.IGNORECASE,
     )
     return int(match.group(1)) if match else 0
+
+
+def earned_points(payload: dict[str, Any], message: str) -> int:
+    """优先读取 points / list[0].change，兼容旧版消息中的积分。"""
+    points = parse_integer(payload.get("points"))
+    if points is not None:
+        return points
+    records = payload.get("list")
+    if isinstance(records, list) and records and isinstance(records[0], dict):
+        change = parse_integer(records[0].get("change"))
+        if change is not None:
+            return change
+    return parse_earned_points(message)
 
 
 class GLaDOSClient:
@@ -322,10 +464,12 @@ class GLaDOSClient:
     ) -> None:
         self.domain = domain
         self.session = requests.Session()
-        selected_user_agent = (
+        self.configured_user_agent = (
             user_agent
             or os.environ.get(USER_AGENT_ENV_NAME, "").strip()
-            or DEFAULT_USER_AGENT
+        )
+        selected_user_agent = (
+            " ".join(self.configured_user_agent.split()) or DEFAULT_USER_AGENT
         )
         self.headers = {
             "cookie": cookie,
@@ -364,12 +508,17 @@ class GLaDOSClient:
                     url,
                     headers=self.headers,
                     timeout=REQUEST_TIMEOUT_SECONDS,
+                    allow_redirects=False,
                     **kwargs,
                 )
                 if response.status_code == 429 or response.status_code >= 500:
                     raise ServiceError(
                         f"服务暂不可用: HTTP {response.status_code}"
                     )
+                if 300 <= response.status_code < 400:
+                    raise ServiceError("服务返回重定向，请检查登录域名")
+                if response.status_code in {401, 403}:
+                    raise AuthenticationError("当前域名未登录或拒绝访问")
                 response.raise_for_status()
                 try:
                     payload = response.json()
@@ -384,7 +533,10 @@ class GLaDOSClient:
                     exc, requests.RequestException
                 )
                 response = getattr(exc, "response", None)
-                if isinstance(exc, requests.HTTPError) and response is not None:
+                if (
+                    isinstance(exc, requests.HTTPError)
+                    and response is not None
+                ):
                     status_code = response.status_code
                     should_retry = retryable and (
                         status_code == 429 or status_code >= 500
@@ -407,19 +559,110 @@ class GLaDOSClient:
                 )
                 time.sleep(wait_seconds)
 
-        error_name = type(last_error).__name__ if last_error else "UnknownError"
+        if isinstance(last_error, AuthenticationError):
+            raise last_error
+        error_name = (
+            type(last_error).__name__ if last_error else "UnknownError"
+        )
         raise ServiceError(f"请求失败: {error_name}") from last_error
 
-    def checkin(self) -> tuple[CheckinCode | None, str, int]:
-        """执行一次幂等签到并返回状态、消息和本次积分。"""
-        payload = self._request_json(
+    def _checkin_attempt(self) -> dict[str, Any]:
+        """先获取 challenge；不可用时按上游行为回退表单请求。"""
+        body = {"token": self.domain}
+        try:
+            challenge = self._request_json(
+                "GET", "/api/user/checkin/challenge"
+            )
+        except ServiceError:
+            challenge = {}
+        nonce = challenge.get("nonce")
+        has_challenge = (
+            parse_api_code(challenge.get("code")) == CheckinCode.SUCCESS
+            and isinstance(nonce, str)
+            and bool(nonce.strip())
+        )
+        if has_challenge:
+            # 上游协议将 nonce 与固定观察版本号用点连接，作为摘要原文。
+            proof_input = f"{nonce}.{CHALLENGE_SUFFIX}"
+            # 网页端使用 UTF-8 编码后计算 SHA-256，无需账号私钥或签名密钥。
+            proof_bytes = proof_input.encode("utf-8")
+            # 服务端接收小写十六进制摘要，和原始 nonce 一起验证。
+            proof = hashlib.sha256(proof_bytes).hexdigest()
+            # nonce 到手后等待网页规定的观察时间，再提交同一会话的证明。
+            time.sleep(CHALLENGE_DELAY_SECONDS)
+            body.update({"nonce": nonce, "proof": proof})
+            request_body = {"json": body}
+        else:
+            LOGGER.warning("未取得签到 challenge，按旧协议提交，积分可能降低")
+            request_body = {"data": body}
+        # nonce 可能只能使用一次；响应丢失时留给下一轮重新获取，禁止重放。
+        return self._request_json(
             "POST",
             "/api/user/checkin",
-            json={"token": self.domain},
+            retryable=False,
+            **request_body,
         )
-        message = compact_message(payload.get("message"))
-        code = classify_checkin(payload.get("code"), message)
-        return code, message, parse_earned_points(message)
+
+    def checkin(self) -> tuple[CheckinCode | None, str, int]:
+        """执行签到；未显式配置 UA 时按服务端登录平台重试一次。"""
+        payload = self._checkin_attempt()
+        device_mismatch = (
+            parse_api_code(payload.get("code")) == CheckinCode.DEVICE_REJECTED
+            and payload.get("reason") == "device-mismatch"
+        )
+        device = payload.get("loginDevice")
+        if (
+            device_mismatch
+            and not self.configured_user_agent
+            and isinstance(device, str)
+            and device in PLATFORM_USER_AGENTS
+        ):
+            LOGGER.warning("登录设备平台不匹配，按 %s 平台重新获取 challenge", device)
+            self.headers["user-agent"] = PLATFORM_USER_AGENTS[device]
+            payload = self._checkin_attempt()
+
+        # 不在日志或推送中回显服务端可能返回的完整 Cookie。
+        raw_message = str(payload.get("message") or "未知错误")
+        raw_message = raw_message.replace(self.headers["cookie"], "[REDACTED]")
+        message = compact_message(raw_message)
+        reason = payload.get("reason")
+        code = classify_checkin(
+            payload.get("code"),
+            raw_message,
+            repeated=payload.get("repeated"),
+            checked_in=payload.get("checkedIn"),
+            reason=reason,
+        )
+        if (
+            parse_api_code(payload.get("code")) == CheckinCode.DEVICE_REJECTED
+            and reason == "device-mismatch"
+        ):
+            message = "device-mismatch: 登录设备与 User-Agent 不匹配"
+        elif (
+            code is None
+            and parse_api_code(payload.get("code"))
+            == CheckinCode.PERMISSION_DENIED
+        ):
+            message = "没有权限，请重新获取 Cookie"
+        points = (
+            earned_points(payload, raw_message)
+            if code == CheckinCode.SUCCESS
+            else 0
+        )
+        return code, message, points
+
+    def probe_login(self) -> bool:
+        """只读探测登录状态；有响应但未登录时不重试。"""
+        try:
+            payload = self._request_json(
+                "GET", "/api/user/status", retryable=False
+            )
+        except AuthenticationError:
+            return False
+        return (
+            parse_api_code(payload.get("code")) == CheckinCode.SUCCESS
+            and isinstance(payload.get("data"), dict)
+        )
 
     def query_remaining_days(self) -> str:
         """查询会员剩余天数，字段缺失时返回未知。"""
@@ -428,11 +671,15 @@ class GLaDOSClient:
         if not isinstance(data, dict):
             return "未知"
         days = parse_integer(data.get("leftDays"))
-        return f"{days} 天" if days is not None else "未知"
+        if days is None or abs(days) > MAX_LEFT_DAYS:
+            return "未知"
+        return f"{days} 天"
 
     def query_total_points(self) -> tuple[str, int | None]:
         """查询账号总积分，兼容两种常见响应结构。"""
-        payload = self._request_json("GET", "/api/user/points")
+        payload = self._request_json(
+            "GET", "/api/user/points", retryable=False
+        )
         value = payload.get("points")
         if value is None and isinstance(payload.get("data"), dict):
             value = payload["data"].get("points")
@@ -448,10 +695,13 @@ class GLaDOSClient:
             retryable=False,
             data={"planType": plan},
         )
-        code = parse_integer(payload.get("code"))
+        code = parse_api_code(payload.get("code"))
         if code == CheckinCode.SUCCESS:
             return True, f"自动兑换 {plan} 成功"
-        message = compact_message(payload.get("message"))
+        raw_message = str(payload.get("message") or "未知错误")
+        message = compact_message(
+            raw_message.replace(self.headers["cookie"], "[REDACTED]")
+        )
         return False, f"自动兑换 {plan} 失败: {message}"
 
 
@@ -460,21 +710,19 @@ def execute_account(
     domain: str,
     cookie: str,
     exchange_plan: str | None,
+    *,
+    name: str = "",
+    user_agent: str = "",
 ) -> AccountResult:
     """执行单账号任务；查询附加信息失败不会覆盖签到结果。"""
-    account_name = f"账号 {index} @ {domain}"
+    account_name = f"{name or f'账号 {index}'} @ {domain}"
     valid, reason = validate_cookie(cookie)
     if not valid:
         return AccountResult(account_name, ResultStatus.FAILED, reason)
 
     LOGGER.info("开始处理账号 %d，域名 %s", index, domain)
-    LOGGER.info(
-        "账号 %d 会话前缀识别为: %s",
-        index,
-        extract_session_prefix(cookie) or "未知",
-    )
     try:
-        with GLaDOSClient(domain, cookie) as client:
+        with GLaDOSClient(domain, cookie, user_agent=user_agent) as client:
             code, message, earned = client.checkin()
             if code not in {
                 CheckinCode.SUCCESS,
@@ -496,6 +744,8 @@ def execute_account(
                     failure_detail = (
                         f"鉴权失败: {message}，请重新获取 Cookie"
                     )
+                elif "please checkin via" in message_lower:
+                    failure_detail = "签到域名被拒，请确认 Cookie 来源域名"
                 else:
                     failure_detail = f"签到失败: {message}"
                 return AccountResult(
@@ -578,13 +828,56 @@ def execute_account(
             index,
             domain,
             type(exc).__name__,
-            exc_info=LOGGER.isEnabledFor(logging.DEBUG),
         )
         return AccountResult(
             account_name,
             ResultStatus.FAILED,
             f"执行异常: {type(exc).__name__}",
         )
+
+
+def execute_configured_account(
+    index: int,
+    account: AccountSettings,
+    settings: Settings,
+) -> AccountResult:
+    """每个账号仅在首个命中登录状态的候选域名签到一次。"""
+    account_name = account.name or f"账号 {index}"
+    valid, reason = validate_cookie(account.cookie)
+    if not valid:
+        return AccountResult(account_name, ResultStatus.FAILED, reason)
+    domains = tuple(
+        dict.fromkeys(
+            ((account.origin,) if account.origin else ()) + settings.domains
+        )
+    )
+    network_failures = 0
+    for domain in domains:
+        try:
+            with GLaDOSClient(
+                domain, account.cookie, account.user_agent
+            ) as client:
+                logged_in = client.probe_login()
+        except ServiceError:
+            network_failures += 1
+            LOGGER.warning("账号 %d 在 %s 的登录探测请求失败", index, domain)
+            continue
+        if logged_in:
+            LOGGER.info("账号 %d 命中登录域名 %s", index, domain)
+            return execute_account(
+                index,
+                domain,
+                account.cookie,
+                settings.exchange_plan,
+                name=account.name,
+                user_agent=account.user_agent,
+            )
+    detail = (
+        "候选域名存在网络或响应异常，未能确认登录状态，请稍后重试"
+        if network_failures
+        else "候选域名均未登录，请确认 Cookie 来源域名或重新获取 Cookie"
+    )
+    return AccountResult(account_name, ResultStatus.FAILED, detail)
 
 
 def calculate_global_status(results: list[AccountResult]) -> ResultStatus:
@@ -643,7 +936,7 @@ def run() -> int:
         notify_results(results)
         return 1
 
-    if not settings.cookies:
+    if not settings.accounts:
         LOGGER.error("配置检查失败: 缺少环境变量 %s", COOKIE_ENV_NAME)
         results = [
             AccountResult(
@@ -663,20 +956,10 @@ def run() -> int:
         notify_results(results)
         return 1
 
-    tasks = [
-        (index, domain, cookie)
-        for index, cookie in enumerate(settings.cookies, start=1)
-        for domain in settings.domains
-    ]
     results = []
-    for task_index, (index, domain, cookie) in enumerate(tasks):
+    for index, account in enumerate(settings.accounts, start=1):
         try:
-            result = execute_account(
-                index,
-                domain,
-                cookie,
-                settings.exchange_plan,
-            )
+            result = execute_configured_account(index, account, settings)
             results.append(result)
             LOGGER.info(
                 "%s 处理完成，状态=%s",
@@ -685,20 +968,18 @@ def run() -> int:
             )
         except Exception as exc:
             LOGGER.error(
-                "账号 %d 在 %s 出现未预期异常: %s",
+                "账号 %d 出现未预期异常: %s",
                 index,
-                domain,
                 type(exc).__name__,
-                exc_info=LOGGER.isEnabledFor(logging.DEBUG),
             )
             results.append(
                 AccountResult(
-                    f"账号 {index} @ {domain}",
+                    account.name or f"账号 {index}",
                     ResultStatus.FAILED,
                     f"未预期异常: {type(exc).__name__}",
                 )
             )
-        if task_index < len(tasks) - 1:
+        if index < len(settings.accounts):
             time.sleep(random.uniform(*ACCOUNT_DELAY_RANGE_SECONDS))
 
     success_count = sum(
