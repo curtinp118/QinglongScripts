@@ -1,0 +1,60 @@
+# Repository-local examples and instructions
+/Demo/
+/AGENTS.md
+
+# Local validation scripts are not distributed with QingLong subscriptions
+test/
+tests/
+test_*
+*_test.*
+*.test.*
+*.spec.*
+
+# Workspace scratch, generated outputs, and archives
+.tmp/
+artifacts/
+archives/
+logs/
+*.log
+
+# Local environment variables and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+dist/
+build/
+*.egg-info/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+.pnpm-store/
+
+# Editors and operating systems
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
