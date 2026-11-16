@@ -6,7 +6,6 @@ from typing import Any
 
 from notify import send
 
-
 GLOBAL_STATUS_LINES = {
     "SUCCESS": "🟢 状态: 成功",
     "PARTIAL_SUCCESS": "🟡 状态: 部分成功",

@@ -35,7 +35,6 @@ from typing import Any
 
 import requests
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -46,7 +45,6 @@ from runtime_control import (  # noqa: E402
     configure_logging,
     wait_for_random_delay,
 )
-
 
 LOGGER = logging.getLogger("glados")
 COOKIE_ENV_NAME = "GLADOS_COOKIES"
@@ -66,9 +64,7 @@ DEFAULT_DOMAINS = (
 )
 KNOWN_DOMAINS = frozenset(DEFAULT_DOMAINS)
 EXCHANGE_PLANS = {"plan100": 100, "plan200": 200, "plan500": 500}
-DISABLED_VALUES = frozenset(
-    {"", "0", "false", "off", "none", "disable", "disabled"}
-)
+DISABLED_VALUES = frozenset({"", "0", "false", "off", "none", "disable", "disabled"})
 DOMAIN_PATTERN = re.compile(
     r"(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+"
     r"[a-z]{2,63}"
@@ -186,8 +182,7 @@ class Settings:
             DOMAIN_ENV_NAME, ACCOUNT_SEPARATOR.join(DEFAULT_DOMAINS)
         )
         domain_items = (
-            normalize_domain(item)
-            for item in raw_domains.split(ACCOUNT_SEPARATOR)
+            normalize_domain(item) for item in raw_domains.split(ACCOUNT_SEPARATOR)
         )
         domains = tuple(dict.fromkeys(item for item in domain_items if item))
         if not domains:
@@ -205,8 +200,7 @@ class Settings:
         exchange_plan = None if raw_plan in DISABLED_VALUES else raw_plan
         if exchange_plan is not None and exchange_plan not in EXCHANGE_PLANS:
             raise ConfigurationError(
-                f"{EXCHANGE_ENV_NAME} 仅支持: "
-                f"{', '.join(EXCHANGE_PLANS)}"
+                f"{EXCHANGE_ENV_NAME} 仅支持: {', '.join(EXCHANGE_PLANS)}"
             )
         return cls(
             accounts=accounts,
@@ -242,13 +236,9 @@ def parse_accounts(raw: str) -> tuple[AccountSettings, ...]:
         try:
             items = json.loads(text)
         except ValueError as exc:
-            raise ConfigurationError(
-                f"{COOKIE_ENV_NAME} 不是合法 JSON 数组"
-            ) from exc
+            raise ConfigurationError(f"{COOKIE_ENV_NAME} 不是合法 JSON 数组") from exc
         if not isinstance(items, list) or not items:
-            raise ConfigurationError(
-                f"{COOKIE_ENV_NAME} 必须是非空账号对象数组"
-            )
+            raise ConfigurationError(f"{COOKIE_ENV_NAME} 必须是非空账号对象数组")
         allowed_fields = {"cookie", "name", "origin", "user-agent"}
         for index, item in enumerate(items, start=1):
             if (
@@ -299,11 +289,7 @@ def normalize_cookie(raw_cookie: str) -> str:
         cookie = cookie[1:-1].strip()
     if cookie[:7].lower() == "cookie:":
         cookie = cookie[7:].strip()
-        while (
-            len(cookie) >= 2
-            and cookie[0] == cookie[-1]
-            and cookie[0] in "\"'"
-        ):
+        while len(cookie) >= 2 and cookie[0] == cookie[-1] and cookie[0] in "\"'":
             cookie = cookie[1:-1].strip()
     return cookie
 
@@ -354,10 +340,7 @@ def validate_cookie(cookie: str) -> tuple[bool, str]:
     if complete:
         return True, ""
 
-    return False, (
-        "Cookie 会话字段不成对或缺失；"
-        f"{COOKIE_FORMAT_HINT}"
-    )
+    return False, (f"Cookie 会话字段不成对或缺失；{COOKIE_FORMAT_HINT}")
 
 
 def classify_checkin(
@@ -372,19 +355,12 @@ def classify_checkin(
     parsed_code = parse_api_code(code)
     if "please checkin via" in message.lower():
         return None
-    if (
-        parsed_code == CheckinCode.DEVICE_REJECTED
-        and reason == "device-mismatch"
-    ):
+    if parsed_code == CheckinCode.DEVICE_REJECTED and reason == "device-mismatch":
         return None
     if isinstance(repeated, bool):
         if repeated:
             return CheckinCode.ALREADY_CHECKED_IN
-        return (
-            CheckinCode.SUCCESS
-            if parsed_code == CheckinCode.SUCCESS
-            else None
-        )
+        return CheckinCode.SUCCESS if parsed_code == CheckinCode.SUCCESS else None
     if parsed_code == CheckinCode.SUCCESS:
         return CheckinCode.SUCCESS
     if parsed_code == CheckinCode.ALREADY_CHECKED_IN:
@@ -465,8 +441,7 @@ class GLaDOSClient:
         self.domain = domain
         self.session = requests.Session()
         self.configured_user_agent = (
-            user_agent
-            or os.environ.get(USER_AGENT_ENV_NAME, "").strip()
+            user_agent or os.environ.get(USER_AGENT_ENV_NAME, "").strip()
         )
         selected_user_agent = (
             " ".join(self.configured_user_agent.split()) or DEFAULT_USER_AGENT
@@ -512,9 +487,7 @@ class GLaDOSClient:
                     **kwargs,
                 )
                 if response.status_code == 429 or response.status_code >= 500:
-                    raise ServiceError(
-                        f"服务暂不可用: HTTP {response.status_code}"
-                    )
+                    raise ServiceError(f"服务暂不可用: HTTP {response.status_code}")
                 if 300 <= response.status_code < 400:
                     raise ServiceError("服务返回重定向，请检查登录域名")
                 if response.status_code in {401, 403}:
@@ -529,14 +502,9 @@ class GLaDOSClient:
                 return payload
             except (requests.RequestException, ServiceError) as exc:
                 last_error = exc
-                should_retry = retryable and isinstance(
-                    exc, requests.RequestException
-                )
+                should_retry = retryable and isinstance(exc, requests.RequestException)
                 response = getattr(exc, "response", None)
-                if (
-                    isinstance(exc, requests.HTTPError)
-                    and response is not None
-                ):
+                if isinstance(exc, requests.HTTPError) and response is not None:
                     status_code = response.status_code
                     should_retry = retryable and (
                         status_code == 429 or status_code >= 500
@@ -561,18 +529,14 @@ class GLaDOSClient:
 
         if isinstance(last_error, AuthenticationError):
             raise last_error
-        error_name = (
-            type(last_error).__name__ if last_error else "UnknownError"
-        )
+        error_name = type(last_error).__name__ if last_error else "UnknownError"
         raise ServiceError(f"请求失败: {error_name}") from last_error
 
     def _checkin_attempt(self) -> dict[str, Any]:
         """先获取 challenge；不可用时按上游行为回退表单请求。"""
         body = {"token": self.domain}
         try:
-            challenge = self._request_json(
-                "GET", "/api/user/checkin/challenge"
-            )
+            challenge = self._request_json("GET", "/api/user/checkin/challenge")
         except ServiceError:
             challenge = {}
         nonce = challenge.get("nonce")
@@ -640,29 +604,23 @@ class GLaDOSClient:
             message = "device-mismatch: 登录设备与 User-Agent 不匹配"
         elif (
             code is None
-            and parse_api_code(payload.get("code"))
-            == CheckinCode.PERMISSION_DENIED
+            and parse_api_code(payload.get("code")) == CheckinCode.PERMISSION_DENIED
         ):
             message = "没有权限，请重新获取 Cookie"
         points = (
-            earned_points(payload, raw_message)
-            if code == CheckinCode.SUCCESS
-            else 0
+            earned_points(payload, raw_message) if code == CheckinCode.SUCCESS else 0
         )
         return code, message, points
 
     def probe_login(self) -> bool:
         """只读探测登录状态；有响应但未登录时不重试。"""
         try:
-            payload = self._request_json(
-                "GET", "/api/user/status", retryable=False
-            )
+            payload = self._request_json("GET", "/api/user/status", retryable=False)
         except AuthenticationError:
             return False
-        return (
-            parse_api_code(payload.get("code")) == CheckinCode.SUCCESS
-            and isinstance(payload.get("data"), dict)
-        )
+        return parse_api_code(
+            payload.get("code")
+        ) == CheckinCode.SUCCESS and isinstance(payload.get("data"), dict)
 
     def query_remaining_days(self) -> str:
         """查询会员剩余天数，字段缺失时返回未知。"""
@@ -677,9 +635,7 @@ class GLaDOSClient:
 
     def query_total_points(self) -> tuple[str, int | None]:
         """查询账号总积分，兼容两种常见响应结构。"""
-        payload = self._request_json(
-            "GET", "/api/user/points", retryable=False
-        )
+        payload = self._request_json("GET", "/api/user/points", retryable=False)
         value = payload.get("points")
         if value is None and isinstance(payload.get("data"), dict):
             value = payload["data"].get("points")
@@ -729,21 +685,12 @@ def execute_account(
                 CheckinCode.ALREADY_CHECKED_IN,
             }:
                 message_lower = message.lower()
-                if any(
-                    keyword in message_lower
-                    for keyword in DEVICE_CHECK_KEYWORDS
-                ):
+                if any(keyword in message_lower for keyword in DEVICE_CHECK_KEYWORDS):
                     failure_detail = (
-                        "设备校验失败: 请设置与登录浏览器一致的 "
-                        f"{USER_AGENT_ENV_NAME}"
+                        f"设备校验失败: 请设置与登录浏览器一致的 {USER_AGENT_ENV_NAME}"
                     )
-                elif any(
-                    keyword in message_lower
-                    for keyword in AUTH_FAIL_KEYWORDS
-                ):
-                    failure_detail = (
-                        f"鉴权失败: {message}，请重新获取 Cookie"
-                    )
+                elif any(keyword in message_lower for keyword in AUTH_FAIL_KEYWORDS):
+                    failure_detail = f"鉴权失败: {message}，请重新获取 Cookie"
                 elif "please checkin via" in message_lower:
                     failure_detail = "签到域名被拒，请确认 Cookie 来源域名"
                 else:
@@ -773,9 +720,7 @@ def execute_account(
                 detail_items.append("总积分未知")
 
             try:
-                detail_items.append(
-                    f"剩余时间 {client.query_remaining_days()}"
-                )
+                detail_items.append(f"剩余时间 {client.query_remaining_days()}")
             except ServiceError as exc:
                 LOGGER.warning(
                     "账号 %d 剩余时间查询失败: %s",
@@ -794,8 +739,7 @@ def execute_account(
                 required_points = EXCHANGE_PLANS[exchange_plan]
                 if total_points < required_points:
                     detail_items.append(
-                        "自动兑换跳过"
-                        f"（积分 {total_points}/{required_points}）"
+                        f"自动兑换跳过（积分 {total_points}/{required_points}）"
                     )
                 else:
                     try:
@@ -815,11 +759,7 @@ def execute_account(
 
             return AccountResult(
                 account_name,
-                (
-                    ResultStatus.FAILED
-                    if exchange_failed
-                    else ResultStatus.SUCCESS
-                ),
+                (ResultStatus.FAILED if exchange_failed else ResultStatus.SUCCESS),
                 "，".join(detail_items),
             )
     except (requests.RequestException, ServiceError) as exc:
@@ -847,16 +787,12 @@ def execute_configured_account(
     if not valid:
         return AccountResult(account_name, ResultStatus.FAILED, reason)
     domains = tuple(
-        dict.fromkeys(
-            ((account.origin,) if account.origin else ()) + settings.domains
-        )
+        dict.fromkeys(((account.origin,) if account.origin else ()) + settings.domains)
     )
     network_failures = 0
     for domain in domains:
         try:
-            with GLaDOSClient(
-                domain, account.cookie, account.user_agent
-            ) as client:
+            with GLaDOSClient(domain, account.cookie, account.user_agent) as client:
                 logged_in = client.probe_login()
         except ServiceError:
             network_failures += 1
@@ -882,9 +818,7 @@ def execute_configured_account(
 
 def calculate_global_status(results: list[AccountResult]) -> ResultStatus:
     """根据各账号结果计算全局状态。"""
-    success_count = sum(
-        result.status == ResultStatus.SUCCESS for result in results
-    )
+    success_count = sum(result.status == ResultStatus.SUCCESS for result in results)
     if success_count == len(results):
         return ResultStatus.SUCCESS
     if success_count == 0:
@@ -894,9 +828,7 @@ def calculate_global_status(results: list[AccountResult]) -> ResultStatus:
 
 def build_payload(results: list[AccountResult]) -> dict[str, Any]:
     """构建仓库统一的通知 Payload。"""
-    success_count = sum(
-        result.status == ResultStatus.SUCCESS for result in results
-    )
+    success_count = sum(result.status == ResultStatus.SUCCESS for result in results)
     failed_count = len(results) - success_count
     return {
         "title": "GLaDOS 自动签到",
@@ -930,9 +862,7 @@ def run() -> int:
         settings = Settings.from_environment()
     except ConfigurationError as exc:
         LOGGER.error("配置检查失败: %s", str(exc))
-        results = [
-            AccountResult("配置检查", ResultStatus.FAILED, str(exc))
-        ]
+        results = [AccountResult("配置检查", ResultStatus.FAILED, str(exc))]
         notify_results(results)
         return 1
 
@@ -982,9 +912,7 @@ def run() -> int:
         if index < len(settings.accounts):
             time.sleep(random.uniform(*ACCOUNT_DELAY_RANGE_SECONDS))
 
-    success_count = sum(
-        result.status == ResultStatus.SUCCESS for result in results
-    )
+    success_count = sum(result.status == ResultStatus.SUCCESS for result in results)
     LOGGER.info(
         "任务完成，账号任务=%d，成功=%d，失败=%d",
         len(results),

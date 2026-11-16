@@ -32,7 +32,6 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -44,7 +43,6 @@ from runtime_control import (  # noqa: E402
     wait_for_random_delay,
 )
 
-
 LOGGER = logging.getLogger("v2ex")
 COOKIE_ENV_NAME = "V2EX_COOKIES"
 ACCOUNT_SEPARATOR = "|||"
@@ -55,9 +53,7 @@ REQUEST_TIMEOUT_SECONDS = 10
 MAX_READ_ATTEMPTS = 3
 MAX_MESSAGE_LENGTH = 160
 ACCOUNT_DELAY_RANGE_SECONDS = (0.5, 1.5)
-REDEEM_PATH_PATTERN = re.compile(
-    r"(/mission/daily/redeem\?once=[A-Za-z0-9_-]+)"
-)
+REDEEM_PATH_PATTERN = re.compile(r"(/mission/daily/redeem\?once=[A-Za-z0-9_-]+)")
 LOGIN_MARKERS = (
     "你要查看的页面需要先登录",
     "you need to sign in first",
@@ -220,9 +216,7 @@ def inspect_daily_page(content: str, response_url: str) -> DailyState:
     requires_login = response_path == "/signin" or any(
         marker in lowered_text for marker in LOGIN_MARKERS
     )
-    already_claimed = any(
-        marker in lowered_text for marker in CLAIMED_MARKERS
-    )
+    already_claimed = any(marker in lowered_text for marker in CLAIMED_MARKERS)
     streak_match = STREAK_PATTERN.search(text)
     return DailyState(
         requires_login=requires_login,
@@ -264,8 +258,7 @@ class V2EXClient:
         self.session.headers.update(
             {
                 "accept": (
-                    "text/html,application/xhtml+xml,application/xml;q=0.9,"
-                    "*/*;q=0.8"
+                    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
                 ),
                 "accept-language": "zh-CN,zh;q=0.9,en;q=0.7",
                 "cookie": cookie,
@@ -295,9 +288,7 @@ class V2EXClient:
                 if response.status_code == 403:
                     raise V2EXError("HTTP 403，访问被拒绝")
                 if response.status_code == 429 or response.status_code >= 500:
-                    last_error = V2EXError(
-                        f"服务暂不可用: HTTP {response.status_code}"
-                    )
+                    last_error = V2EXError(f"服务暂不可用: HTTP {response.status_code}")
                 elif 400 <= response.status_code < 500:
                     raise V2EXError(f"请求失败: HTTP {response.status_code}")
                 else:
@@ -409,9 +400,7 @@ def perform_checkin(client: V2EXClient) -> tuple[bool, str]:
             redeem_path = refreshed_state.redeem_path
 
     claim_confirmed = any(
-        marker in text
-        for text in claim_texts
-        for marker in CLAIM_SUCCESS_MARKERS
+        marker in text for text in claim_texts for marker in CLAIM_SUCCESS_MARKERS
     )
     try:
         verification_response = client.get_daily()
@@ -468,9 +457,7 @@ def execute_account(index: int, cookie: str) -> AccountResult:
 
 def calculate_global_status(results: list[AccountResult]) -> ResultStatus:
     """根据账号结果计算全局状态。"""
-    success_count = sum(
-        result.status == ResultStatus.SUCCESS for result in results
-    )
+    success_count = sum(result.status == ResultStatus.SUCCESS for result in results)
     if success_count == len(results):
         return ResultStatus.SUCCESS
     if success_count == 0:
@@ -480,9 +467,7 @@ def calculate_global_status(results: list[AccountResult]) -> ResultStatus:
 
 def build_payload(results: list[AccountResult]) -> dict[str, Any]:
     """构建仓库统一通知 Payload。"""
-    success_count = sum(
-        result.status == ResultStatus.SUCCESS for result in results
-    )
+    success_count = sum(result.status == ResultStatus.SUCCESS for result in results)
     failed_count = len(results) - success_count
     return {
         "title": "V2EX 每日签到",
@@ -561,9 +546,7 @@ def run() -> int:
         if offset < len(cookies) - 1:
             time.sleep(random.uniform(*ACCOUNT_DELAY_RANGE_SECONDS))
 
-    success_count = sum(
-        result.status == ResultStatus.SUCCESS for result in results
-    )
+    success_count = sum(result.status == ResultStatus.SUCCESS for result in results)
     LOGGER.info(
         "任务完成，账号=%d，成功=%d，失败=%d",
         len(results),

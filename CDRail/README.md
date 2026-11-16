@@ -17,7 +17,7 @@ CDRail/
 
 | 变量 | 必填 | 说明 |
 | --- | --- | --- |
-| `CDRAIL_HEADERS_JSON` | 是 | 抓包导出的完整请求头 JSON；多账号用 `|||` 分割 |
+| `CDRAIL_HEADERS_JSON` | 是 | 抓包导出的完整请求头 JSON；多账号用 `\|\|\|` 分割 |
 | `QL_RANDOM_DELAY_ENABLED` | 否 | 是否启用任务启动随机延迟，默认 `true` |
 | `QL_RANDOM_DELAY_MIN_SECONDS` | 否 | 最小延迟秒数，默认 `0` |
 | `QL_RANDOM_DELAY_MAX_SECONDS` | 否 | 最大延迟秒数，默认 `300` |
@@ -43,13 +43,24 @@ CDRail/
 
 ## 青龙配置
 
+先按[仓库首页](../README.md#在青龙中使用)添加仓库订阅、安装 Python3 依赖并运行一次订阅。
+只订阅本项目时，使用下方白名单，公共依赖字段保持首页配置：
+
+```text
+^CDRail/CDRail\.py$
+```
+
+`<订阅唯一值>` 需替换为面板实际生成的目录，通常为 `curtinp118_QinglongScripts_main`。
+通知渠道和随机延迟的完整说明见[全局配置](../docs/configuration.md)。
+
 定时任务命令：
 
 ```text
-task <仓库目录>/CDRail/CDRail.py
+task <订阅唯一值>/CDRail/CDRail.py
 ```
 
-默认 Cron 表达式为 `10 9 * * *`。依赖安装：
+默认 Cron 表达式为 `10 9 * * *`，按面板时区解释。
+在青龙依赖管理的 Python3 分类安装 `requests`。独立 Python 环境在仓库根目录运行：
 
 ```bash
 python3 -m pip install -r CDRail/requirements.txt

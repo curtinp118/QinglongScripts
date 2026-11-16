@@ -30,7 +30,6 @@ from typing import Any
 
 import requests
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -42,14 +41,10 @@ from runtime_control import (  # noqa: E402
     wait_for_random_delay,
 )
 
-
 LOGGER = logging.getLogger("cdrail")
 HEADERS_ENV_NAME = "CDRAIL_HEADERS_JSON"
 ACCOUNT_SEPARATOR = "|||"
-SIGN_IN_URL = (
-    "https://app.cdmetro.chengdurail.cn/"
-    "platform/users/user/sign-in-integral"
-)
+SIGN_IN_URL = "https://app.cdmetro.chengdurail.cn/platform/users/user/sign-in-integral"
 REQUEST_TIMEOUT_SECONDS = 10
 ACCOUNT_DELAY_RANGE_SECONDS = (0.5, 1.5)
 MAX_MESSAGE_LENGTH = 160
@@ -139,18 +134,14 @@ def parse_headers(raw_headers: str) -> dict[str, str]:
     if not isinstance(payload, dict):
         raise ConfigurationError("请求头 JSON 顶层必须是对象")
 
-    casefolded = {
-        str(key).casefold(): value for key, value in payload.items()
-    }
+    casefolded = {str(key).casefold(): value for key, value in payload.items()}
     selected: dict[str, str] = {}
     for name, default in DEFAULT_HEADERS.items():
         value = casefolded.get(name.casefold())
         if value is None and name in {"device-id", "deviceId"}:
             alternate = "deviceid" if name == "device-id" else "device-id"
             value = casefolded.get(alternate.casefold())
-        selected[name] = (
-            normalize_header_value(value) if value is not None else default
-        )
+        selected[name] = normalize_header_value(value) if value is not None else default
 
     if not selected["Cookie"].strip() and not selected["token"].strip():
         raise ConfigurationError("请求头至少需要 Cookie 或 token")
@@ -216,14 +207,12 @@ class CDRailClient:
         payload = parse_response(response.text)
         raw_message = payload.get("message") or payload.get("msg") or ""
         message = compact_message(raw_message)
-        raw_code = (
-            payload["code"]
-            if "code" in payload
-            else payload.get("status", "")
+        raw_code = payload["code"] if "code" in payload else payload.get("status", "")
+        code = (
+            CheckinCode(str(raw_code))
+            if str(raw_code) in {item.value for item in CheckinCode}
+            else None
         )
-        code = CheckinCode(str(raw_code)) if str(raw_code) in {
-            item.value for item in CheckinCode
-        } else None
         increment: str | None = None
         data = payload.get("data")
         if isinstance(data, dict) and data.get("integralIncrement") is not None:
@@ -278,23 +267,15 @@ def execute_account(index: int, headers: dict[str, str]) -> AccountResult:
 
 def calculate_global_status(results: list[AccountResult]) -> ResultStatus:
     """根据账号结果计算全局状态。"""
-    success_count = sum(
-        result.status == ResultStatus.SUCCESS for result in results
-    )
+    success_count = sum(result.status == ResultStatus.SUCCESS for result in results)
     if success_count == len(results):
         return ResultStatus.SUCCESS
-    return (
-        ResultStatus.FAILED
-        if success_count == 0
-        else ResultStatus.PARTIAL_SUCCESS
-    )
+    return ResultStatus.FAILED if success_count == 0 else ResultStatus.PARTIAL_SUCCESS
 
 
 def build_payload(results: list[AccountResult]) -> dict[str, Any]:
     """构建仓库统一通知 Payload。"""
-    success_count = sum(
-        result.status == ResultStatus.SUCCESS for result in results
-    )
+    success_count = sum(result.status == ResultStatus.SUCCESS for result in results)
     failed_count = len(results) - success_count
     return {
         "title": "成都地铁积分签到",
@@ -364,9 +345,7 @@ def run() -> int:
         if offset < len(headers_list) - 1:
             time.sleep(random.uniform(*ACCOUNT_DELAY_RANGE_SECONDS))
 
-    success_count = sum(
-        result.status == ResultStatus.SUCCESS for result in results
-    )
+    success_count = sum(result.status == ResultStatus.SUCCESS for result in results)
     LOGGER.info(
         "任务完成，账号=%d，成功=%d，失败=%d",
         len(results),
@@ -376,8 +355,7 @@ def run() -> int:
     notification_ok = notify_results(results)
     return (
         0
-        if calculate_global_status(results) == ResultStatus.SUCCESS
-        and notification_ok
+        if calculate_global_status(results) == ResultStatus.SUCCESS and notification_ok
         else 1
     )
 

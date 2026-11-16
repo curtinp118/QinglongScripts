@@ -23,8 +23,8 @@ GLaDOS/
 
 | 变量 | 必填 | 说明 |
 | --- | --- | --- |
-| `GLADOS_COOKIES` | 是 | 推荐账号 JSON 数组；兼容 Cookie 用 `|||`、`&` 或换行分隔 |
-| `GLADOS_DOMAINS` | 否 | 候选服务域名，用 `|||` 分隔；未设置时按下方顺序探测内置域名 |
+| `GLADOS_COOKIES` | 是 | 推荐账号 JSON 数组；兼容 Cookie 用 `\|\|\|`、`&` 或换行分隔 |
+| `GLADOS_DOMAINS` | 否 | 候选服务域名，用 `\|\|\|` 分隔；未设置时按下方顺序探测内置域名 |
 | `GLADOS_EXCHANGE_PLAN` | 否 | `plan100`、`plan200` 或 `plan500`，默认关闭 |
 | `GLADOS_USER_AGENT` | 否 | 所有账号的默认 User-Agent；账号 JSON 的 `user-agent` 优先 |
 | `QL_RANDOM_DELAY_ENABLED` | 否 | 是否启用任务启动随机延迟，默认 `true` |
@@ -79,13 +79,23 @@ gld:sess=<账号1>; gld:sess.sig=<签名1>|||koa:sess=<账号2>; koa:sess.sig=<�
 
 ## 青龙配置
 
+先按[仓库首页](../README.md#在青龙中使用)添加仓库订阅、安装 Python3 依赖并运行一次订阅。
+只订阅本项目时，使用下方白名单，公共依赖字段保持首页配置：
+
+```text
+^GLaDOS/GLaDOS\.py$
+```
+
+`<订阅唯一值>` 需替换为面板实际生成的目录，通常为 `curtinp118_QinglongScripts_main`。
+通知渠道和随机延迟的完整说明见[全局配置](../docs/configuration.md)。
+
 定时任务命令：
 
 ```text
-task <仓库目录>/GLaDOS/GLaDOS.py
+task <订阅唯一值>/GLaDOS/GLaDOS.py
 ```
 
-默认 Cron 表达式为 `0 8 * * *`。
+默认 Cron 表达式为 `0 8 * * *`，按面板时区解释。
 
 安装依赖：
 

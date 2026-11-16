@@ -12,19 +12,49 @@ test_*
 
 # Workspace scratch, generated outputs, and archives
 .tmp/
+/.local/
+/scratch/
+/downloads/
 artifacts/
 archives/
 logs/
 *.log
+*.log.[0-9]*
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+*~
+
+# Captured traffic and HTTP debugging sessions may contain account credentials
+/captures/
+*.har
+*.saz
+*.pcap
+*.pcapng
+*.mitm
 
 # Local environment variables and credentials
 .env
 .env.*
 !.env.example
+!.env.*.example
+!.env.sample
+.envrc
+.secrets/
+*.local.json
+*.local.yaml
+*.local.yml
+*.local.toml
+*.local.ini
 *.pem
 *.key
 *.p12
 *.pfx
+*.p8
+*.jks
+*.keystore
 
 # Python
 __pycache__/
@@ -33,14 +63,39 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.pyre/
+.pytype/
+.hypothesis/
+.tox/
+.nox/
+.cache/
 .coverage
+.coverage.*
+coverage.xml
+nosetests.xml
+junit.xml
 htmlcov/
 .venv/
+.venv-*/
 venv/
+venv-*/
 env/
+__pypackages__/
+pip-wheel-metadata/
+pip-log.txt
+pip-delete-this-directory.txt
 dist/
 build/
 *.egg-info/
+*.egg
+.eggs/
+.ipynb_checkpoints/
+
+# Local database state
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
 
 # Node.js
 node_modules/
@@ -50,11 +105,31 @@ yarn-error.log*
 pnpm-debug.log*
 .npm/
 .pnpm-store/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/install-state.gz
+.yarn/build-state.yml
+.eslintcache
+.stylelintcache
+*.tsbuildinfo
+coverage/
 
 # Editors and operating systems
 .DS_Store
+.AppleDouble
+._*
 Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
 .idea/
 .vscode/
+.vs/
+.history/
+*.code-workspace
 *.swp
 *.swo
+
+# Keep source, docs, dependency lockfiles, and sanitized examples trackable.
+# Ignore personal configuration as *.local.* instead of ignoring all JSON/YAML.

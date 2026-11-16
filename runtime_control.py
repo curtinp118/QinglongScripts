@@ -10,7 +10,6 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-
 RANDOM_DELAY_ENABLED_ENV_NAME = "QL_RANDOM_DELAY_ENABLED"
 RANDOM_DELAY_MIN_ENV_NAME = "QL_RANDOM_DELAY_MIN_SECONDS"
 RANDOM_DELAY_MAX_ENV_NAME = "QL_RANDOM_DELAY_MAX_SECONDS"
@@ -79,8 +78,7 @@ class RandomDelaySettings:
         )
         if minimum > maximum:
             raise RandomDelayConfigurationError(
-                f"{RANDOM_DELAY_MIN_ENV_NAME} 不能大于 "
-                f"{RANDOM_DELAY_MAX_ENV_NAME}"
+                f"{RANDOM_DELAY_MIN_ENV_NAME} 不能大于 {RANDOM_DELAY_MAX_ENV_NAME}"
             )
         return cls(enabled, minimum, maximum)
 
@@ -95,8 +93,7 @@ def _parse_enabled(raw_value: str | None) -> bool:
     if normalized in FALSE_VALUES:
         return False
     raise RandomDelayConfigurationError(
-        f"{RANDOM_DELAY_ENABLED_ENV_NAME} 仅支持 true/false、1/0、"
-        "yes/no 或 on/off"
+        f"{RANDOM_DELAY_ENABLED_ENV_NAME} 仅支持 true/false、1/0、yes/no 或 on/off"
     )
 
 
@@ -111,13 +108,10 @@ def _parse_seconds(
     try:
         value = int(raw_value.strip())
     except ValueError as exc:
-        raise RandomDelayConfigurationError(
-            f"{variable_name} 必须是整数秒数"
-        ) from exc
+        raise RandomDelayConfigurationError(f"{variable_name} 必须是整数秒数") from exc
     if not 0 <= value <= MAX_RANDOM_DELAY_SECONDS:
         raise RandomDelayConfigurationError(
-            f"{variable_name} 必须在 0 到 {MAX_RANDOM_DELAY_SECONDS} "
-            "之间"
+            f"{variable_name} 必须在 0 到 {MAX_RANDOM_DELAY_SECONDS} 之间"
         )
     return value
 

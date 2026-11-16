@@ -19,7 +19,7 @@ V2EX/
 
 | 变量 | 必填 | 说明 |
 | --- | --- | --- |
-| `V2EX_COOKIES` | 是 | V2EX 登录 Cookie，多账号用 `|||` 分隔 |
+| `V2EX_COOKIES` | 是 | V2EX 登录 Cookie，多账号用 `\|\|\|` 分隔 |
 | `QL_RANDOM_DELAY_ENABLED` | 否 | 是否启用任务启动随机延迟，默认 `true` |
 | `QL_RANDOM_DELAY_MIN_SECONDS` | 否 | 最小延迟秒数，默认 `0` |
 | `QL_RANDOM_DELAY_MAX_SECONDS` | 否 | 最大延迟秒数，默认 `300` |
@@ -40,7 +40,7 @@ PB3_SESSION=<账号1会话>; A2=<账号1认证>|||PB3_SESSION=<账号2会话>; A
 Cookie 字段可能随 V2EX 调整，脚本会完整使用环境变量中提供的 Cookie，不限定字段
 名称。不要在 README、Issue、任务命令或日志中填写真实值。
 
-通知渠道使用根目录青龙官方 `notify.py` 的全局变量，例如 Telegram 的
+通知渠道使用青龙官方 `notify.py` 的全局变量，例如 Telegram 的
 `TG_BOT_TOKEN` 和 `TG_USER_ID`。项目脚本不会读取、重定义或覆盖通知变量。
 
 ## 获取 Cookie
@@ -55,6 +55,16 @@ Cookie 等同于登录凭证，应只保存在受控的青龙实例中。失效�
 
 ## 青龙配置
 
+先按[仓库首页](../README.md#在青龙中使用)添加仓库订阅、安装 Python3 依赖并运行一次订阅。
+只订阅本项目时，使用下方白名单，公共依赖字段保持首页配置：
+
+```text
+^V2EX/V2EX\.py$
+```
+
+`<订阅唯一值>` 需替换为面板实际生成的目录，通常为 `curtinp118_QinglongScripts_main`。
+通知渠道和随机延迟的完整说明见[全局配置](../docs/configuration.md)。
+
 1. 在青龙 **环境变量** 中创建 `V2EX_COOKIES`。
 2. 确认 **依赖管理** 中已安装 Python3 依赖 `requests`。
 3. 运行仓库订阅，让青龙自动创建任务。
@@ -65,10 +75,11 @@ Cookie 等同于登录凭证，应只保存在受控的青龙实例中。失效�
 task <订阅唯一值>/V2EX/V2EX.py
 ```
 
-脚本头部 Cron 为 `20 9 * * *`，即每天 09:20 执行。V2EX 的每日奖励按 UTC
+脚本头部 Cron 为 `20 9 * * *`，按面板时区每天 09:20 执行，建议设为 `Asia/Shanghai`。
+V2EX 的每日奖励按 UTC
 日期计算，北京时间 08:00 后才进入新的一天，因此默认时间留出了缓冲。
 
-## 本地验证
+## 本地运行
 
 ```bash
 python3 -m venv .venv
@@ -102,7 +113,7 @@ V2EX 页面结构可能发生变化，或者当前语言页面未返回预期内
 
 ### 任务执行成功但没有通知
 
-检查根 README 中的通用通知变量，并在青龙环境变量中至少配置一个通知渠道。
+检查[全局配置](../docs/configuration.md)中的通知变量，并在青龙环境变量中至少配置一个通知渠道。
 
 ## 相关链接
 
