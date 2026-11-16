@@ -140,3 +140,19 @@ python3 -m pip install -r GLaDOS/requirements.txt
 - 重跑返回“今日已签到”时会跳过兑换，避免同一天重复兑换。
 - 积分不足时跳过兑换；兑换接口失败会在账号结果中标记失败。
 - 不在集成内实现任何通知渠道，所有推送统一交给官方 `notify.py`。
+
+## Cloudflare 验证失败
+
+`Cloudflare verification failed. Nothing was recorded — please retry.` 表示服务端
+拒绝本次签到验证，即使 HTTP 状态为 `200` 也不是签到成功。登录探测通过只表明
+`/api/user/status` 接受该登录态，不能证明签到的人机验证已经通过。
+
+本脚本的 nonce / SHA-256 proof 与 Cloudflare Turnstile 是不同的校验流程，
+纯 `requests` 请求不具备浏览器交互验证能力。请在本人浏览器打开对应域名的官网签到页面，
+正常完成验证后手动签到，并确认官网签到记录。不要持续高频重跑；脚本不会自动重试此类失败。
+调整随机延迟或 User-Agent 不能保证解决 Turnstile 问题。
+
+脚本优先将业务码 `5`、`reason=turnstile` 或明确的验证失败消息判为失败，
+不会因为响应同时出现成功码或已签到标记而忽略验证错误。
+参考仓库的[浏览器方案说明](https://github.com/Devilstore/Glados-Railgun-checkin#-浏览器扩展cloudflare-备用方案)
+也说明了纯 HTTP 请求的限制；本仓库未集成该扩展。

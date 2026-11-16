@@ -21,6 +21,9 @@
 业务脚本日志只输出任务阶段、账号序号/域名、状态和错误类型，不输出 Cookie、Token
 或完整响应。预期的网络和账号失败不会打印 traceback；需要排查未预期异常时，将青龙
 变量 `QL_LOG_LEVEL` 设为 `DEBUG`；部分异常处理分支会附加 traceback。
+该级别只用于业务日志，`requests` / `urllib3` 保持 `WARNING`，避免其请求调试日志
+输出包含通知 Token、接收人和正文的完整 URL。DEBUG traceback 仍可能带有异常上下文，
+对外分享前应检查并脱敏。
 
 ## 通知渠道
 

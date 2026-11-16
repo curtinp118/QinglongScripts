@@ -12,8 +12,8 @@ env:
   - QL_RANDOM_DELAY_MIN_SECONDS (选填): 最小延迟秒数，默认 0
   - QL_RANDOM_DELAY_MAX_SECONDS (选填): 最大延迟秒数，默认 300
   - QL_LOG_LEVEL (选填): 日志级别，默认 INFO，可设 DEBUG/INFO/WARNING/ERROR
-version: 1.4.0
-updated: 2026-11-15
+version: 1.4.1
+updated: 2026-11-16
 disclaimer: 仅供学习交流，禁止用于商业用途，风险自负
 """
 
@@ -133,6 +133,7 @@ class CheckinCode(IntEnum):
     SUCCESS = 0
     ALREADY_CHECKED_IN = 1
     DEVICE_REJECTED = 4  # 设备校验失败，reason 区分是否为平台不匹配。
+    VERIFICATION_FAILED = 5
 
 
 class ResultStatus(str, Enum):
@@ -343,6 +344,20 @@ def validate_cookie(cookie: str) -> tuple[bool, str]:
     return False, (f"Cookie 会话字段不成对或缺失；{COOKIE_FORMAT_HINT}")
 
 
+def is_cloudflare_verification_failure(
+    code: Any,
+    message: str,
+    reason: Any = None,
+) -> bool:
+    """识别业务层人机验证失败，不把 HTTP 200 或重复标记当作成功。"""
+    return (
+        parse_api_code(code) == CheckinCode.VERIFICATION_FAILED
+        or str(reason or "").strip().lower() == "turnstile"
+        or "cloudflare verification failed" in message.lower()
+        or "turnstile" in message.lower()
+    )
+
+
 def classify_checkin(
     code: Any,
     message: str,
@@ -353,6 +368,8 @@ def classify_checkin(
 ) -> CheckinCode | None:
     """按上游网页判定顺序处理拒绝、repeated、code 和 checkedIn。"""
     parsed_code = parse_api_code(code)
+    if is_cloudflare_verification_failure(code, message, reason):
+        return None
     if "please checkin via" in message.lower():
         return None
     if parsed_code == CheckinCode.DEVICE_REJECTED and reason == "device-mismatch":
@@ -590,6 +607,13 @@ class GLaDOSClient:
         raw_message = raw_message.replace(self.headers["cookie"], "[REDACTED]")
         message = compact_message(raw_message)
         reason = payload.get("reason")
+        if is_cloudflare_verification_failure(payload.get("code"), raw_message, reason):
+            LOGGER.warning("Cloudflare 人机验证未通过，请在官网浏览器中完成验证与签到")
+            return (
+                None,
+                "Cloudflare 验证未通过，本次未确认签到成功；请在官网浏览器中完成验证与签到",
+                0,
+            )
         code = classify_checkin(
             payload.get("code"),
             raw_message,

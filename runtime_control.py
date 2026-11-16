@@ -36,10 +36,14 @@ def configure_logging(logger: logging.Logger) -> None:
         level_name = DEFAULT_LOG_LEVEL
 
     logging.basicConfig(
-        level=getattr(logging, level_name),
+        level=logging.INFO,
         format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+    # HTTP 调试日志会输出完整请求 URL，其中可能包含通知 Token 和正文。
+    # 业务 DEBUG 仅作用于入口 logger，不向第三方 HTTP 库开放请求跟踪。
+    for library_name in ("urllib3", "requests", "requests.packages.urllib3"):
+        logging.getLogger(library_name).setLevel(logging.WARNING)
     logger.setLevel(getattr(logging, level_name))
     if raw_level.strip() and raw_level.strip().upper() not in SUPPORTED_LOG_LEVELS:
         logger.warning(
